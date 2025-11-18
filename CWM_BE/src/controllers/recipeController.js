@@ -16,76 +16,70 @@ exports.createRecipe = async (req, res) => {
     const videoFiles = req.files?.video || [];
     const stepImages = req.files?.stepImages || [];
 
-    // Upload ảnh đại diện công thức
-    let recipeImageUrls = [];
+    const recipeImageUrls = [];
     for (const file of imageFiles) {
       const uploadResult = await cloudinary.uploader.upload(file.path, { folder: "recipes" });
       recipeImageUrls.push(uploadResult.secure_url);
       fs.unlinkSync(file.path);
     }
 
-    // Upload từng ảnh bước nấu ăn
     const updatedSteps = await Promise.all(
       steps.map(async (step, index) => {
-        const imageFile = stepImages?.[index];
-        const description = typeof step === "string" ? step : step.description;
-        let imageUrl = null;
+        const imageFile = stepImages[index];
+        let imageUrl = step.image_url;
         if (imageFile) {
           const uploadResult = await cloudinary.uploader.upload(imageFile.path, { folder: "recipes/steps" });
           imageUrl = uploadResult.secure_url;
           fs.unlinkSync(imageFile.path);
         }
-        return { description, image_url: imageUrl, order: index + 1 };
+        return { description: step.description, image_url: imageUrl, order: index + 1 };
       })
     );
 
-    // Upload video (nếu có)
-    let videoUrl = null;
-    if (videoFiles.length > 0) {
-      const uploadVideo = await cloudinary.uploader.upload(videoFiles[0].path, {
-        folder: "recipes/videos",
-        resource_type: "video",
-      });
-      videoUrl = uploadVideo.secure_url;
-      fs.unlinkSync(videoFiles[0].path);
-    }
-
-    // ✅ Tạo công thức (trạng thái Pending)
     const recipe = await Recipe.create({
       user_id,
       title,
       description,
-      steps: updatedSteps,
-      images: recipeImageUrls,
-      video_url: videoUrl,
       difficulty_level,
       cooking_time,
+      steps: updatedSteps,
+      images: recipeImageUrls,
       status: "Pending",
     });
 
-    // Liên kết categories & ingredients
     if (Array.isArray(category_ids) && category_ids.length > 0) {
-      await RecipeCategory.bulkCreate(
-        category_ids.map((catId) => ({ recipe_id: recipe.recipe_id, category_id: catId })),
-        { ignoreDuplicates: true }
-      );
+      const categoryLinks = category_ids.map((cid) => ({
+        recipe_id: recipe.recipe_id,
+        category_id: cid,
+      }));
+      await RecipeCategory.bulkCreate(categoryLinks);
     }
 
     if (Array.isArray(ingredients) && ingredients.length > 0) {
-      await RecipeIngredient.bulkCreate(
-        ingredients.map((ing) => ({
-          recipe_id: recipe.recipe_id,
-          ingredient_id: ing.ingredient_id,
-          quantity: ing.quantity,
-          unit: ing.unit,
-        })),
-        { ignoreDuplicates: true }
-      );
+      const ingredientLinks = ingredients.map((ing) => ({
+        recipe_id: recipe.recipe_id,
+        ingredient_id: ing.ingredient_id,
+        quantity: ing.quantity,
+        unit: ing.unit,
+      }));
+      await RecipeIngredient.bulkCreate(ingredientLinks);
     }
 
-    return res.status(201).json({ message: "Tạo công thức thành công! Vui lòng chờ admin duyệt.", recipe });
+    return res.status(201).json({
+      message: "Tạo công thức thành công! Vui lòng chờ admin duyệt.",
+      recipe,
+    });
   } catch (error) {
     console.error("❌ Lỗi createRecipe:", error);
+    if (req.files) {
+      Object.values(req.files)
+        .flat()
+        .forEach((file) => {
+          try {
+            fs.unlinkSync(file.path);
+          } catch (e) {}
+        });
+    }
     res.status(500).json({ message: "Lỗi tạo công thức", error: error.message });
   }
 };

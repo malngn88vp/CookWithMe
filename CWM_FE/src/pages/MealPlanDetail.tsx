@@ -64,14 +64,12 @@ const MealPlanDetail = () => {
       setStartDate(new Date(plan.start_date));
       setEndDate(new Date(plan.end_date));
 
-      // Map recipes đúng
-      if (plan.recipes && Array.isArray(plan.recipes)) {
+      if (Array.isArray(plan.recipes)) {
         const mapped = plan.recipes.map((item: any) => {
-          const meal_time = convertMealTypeReverse(item.MealPlanRecipe.meal_type) || "Sáng";
+          const meal_time = convertMealTypeReverse(item.MealPlanRecipe?.meal_type) || "Sáng";
           const title = item.title || "Không rõ";
 
-          // Chuẩn hóa date YYYY-MM-DD
-          const dateObj = new Date(item.MealPlanRecipe.scheduled_date);
+          const dateObj = new Date(item.MealPlanRecipe?.scheduled_date);
           const year = dateObj.getFullYear();
           const month = String(dateObj.getMonth() + 1).padStart(2, "0");
           const day = String(dateObj.getDate()).padStart(2, "0");
@@ -83,8 +81,8 @@ const MealPlanDetail = () => {
       } else {
         setRecipes([]);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("❌ fetchPlan lỗi:", err);
       toast.error("Không thể tải kế hoạch");
     }
   };
@@ -174,7 +172,6 @@ const MealPlanDetail = () => {
       toast.error("Bạn chưa chọn món nào");
       return;
     }
-
     try {
       for (const item of tempMeals) {
         await mealPlanAPI.addRecipe(id!, {
@@ -186,18 +183,16 @@ const MealPlanDetail = () => {
 
       toast.success("Đã lưu kế hoạch!");
 
-      setRecipes((prev) => [
-        ...prev,
-        ...tempMeals.map((m) => ({
-          date: m.date,
-          meal_time: m.meal_time,
-          title: m.recipe.title,
-        })),
-      ]);
+      // Bao try-catch riêng cho fetchPlan
+      try {
+        await fetchPlan(id!);
+      } catch (fetchErr) {
+        console.error("❌ fetchPlan thất bại:", fetchErr);
+      }
 
       setTempMeals([]);
     } catch (err) {
-      console.error(err);
+      console.error("❌ Lỗi lưu kế hoạch:", err);
       toast.error("Lỗi lưu kế hoạch");
     }
   };

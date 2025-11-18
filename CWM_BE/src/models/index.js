@@ -34,7 +34,7 @@ fs
   });
 
 // ✅ Thay vì gọi db[model].associate → gọi file associates.js
-require('./associates')(db);
+process.nextTick(() => require('./associates')(db));
 
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
