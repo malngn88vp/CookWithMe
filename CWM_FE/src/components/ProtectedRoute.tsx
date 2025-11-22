@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   const { user, loading } = useAuth();
 
-  // ⏳ Đợi load user từ localStorage
+  // ⏳ Chờ AuthContext load token + user xong
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen text-lg font-medium">
@@ -18,20 +18,26 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
     );
   }
 
-  // 🚫 Nếu chưa đăng nhập
+  // ❌ Không có user → chưa đăng nhập
   if (!user) {
     return <Navigate to="/auth/login" replace />;
   }
 
-  // 🚷 Nếu không đúng vai trò (chuyển hết về chữ thường)
-  const userRole = user.role?.toLowerCase() || "";
-  const allowed = allowedRoles?.map(r => r.toLowerCase()) || [];
-
-  if (allowed.length > 0 && !allowed.includes(userRole)) {
-    return <Navigate to="/" replace />;
+  // ❌ Tài khoản bị khóa (phòng trường hợp user bị khóa sau khi login)
+  if (user.is_locked) {
+    return <Navigate to="/auth/login" replace />;
   }
 
-  // ✅ Cho phép truy cập
+  // 🎯 Kiểm tra role nếu route yêu cầu quyền hạn
+  if (allowedRoles && allowedRoles.length > 0) {
+    const userRole = user.role?.toLowerCase() || "";
+    const allowed = allowedRoles.map((r) => r.toLowerCase());
+
+    if (!allowed.includes(userRole)) {
+      return <Navigate to="/" replace />;
+    }
+  }
+
   return <>{children}</>;
 };
 

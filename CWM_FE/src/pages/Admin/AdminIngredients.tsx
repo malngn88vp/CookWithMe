@@ -1,26 +1,37 @@
-import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Search } from 'lucide-react';
-import { ingredientAPI } from '../../services/api';
-import toast from 'react-hot-toast';
+import { useState, useEffect } from "react";
+import { Plus, Edit2, Trash2, Save, X, Search } from "lucide-react";
+import { ingredientAPI } from "../../services/api";
+import toast from "react-hot-toast";
 
 export const AdminIngredients = () => {
   const [ingredients, setIngredients] = useState<any[]>([]);
   const [filteredIngredients, setFilteredIngredients] = useState<any[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [formData, setFormData] = useState({ name: '', unit: '' });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
 
+  const [formData, setFormData] = useState({
+    name: "",
+    unit: "",
+    calories: "",
+    protein: "",
+    carbs: "",
+    fat: "",
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // ========================= LOAD DATA =========================
   useEffect(() => {
     fetchIngredients();
   }, []);
 
   useEffect(() => {
-    const filtered = ingredients.filter(ing =>
-      ing.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ing.unit?.toLowerCase().includes(searchTerm.toLowerCase())
+    const filtered = ingredients.filter(
+      (ing) =>
+        ing.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ing.default_unit?.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredIngredients(filtered);
   }, [searchTerm, ingredients]);
@@ -29,260 +40,251 @@ export const AdminIngredients = () => {
     try {
       const response = await ingredientAPI.getAll();
 
-      // ✅ Lấy dữ liệu chuẩn
-      setIngredients(response.data.data || []);
+      const data = response.data.data || [];
 
-      // ✅ Reset lỗi cũ nếu load thành công
-      setError('');
+      setIngredients(data);
+      setError("");
     } catch (error) {
-      console.error('❌ Failed to fetch ingredients:', error);
-      setError('Failed to load ingredients');
-      toast.error('Không thể tải nguyên liệu');
+      console.error("❌ Failed to fetch ingredients:", error);
+      toast.error("Không thể tải nguyên liệu!");
     } finally {
       setLoading(false);
     }
   };
 
+  // ========================= ADD =========================
   const handleAdd = async () => {
     if (!formData.name.trim()) {
-      setError('Ingredient name is required');
+      setError("Tên nguyên liệu là bắt buộc");
       return;
     }
 
     try {
-      await ingredientAPI.create(formData);
-      setFormData({ name: '', unit: '' });
-      setIsAdding(false);
-      setError('');
+      await ingredientAPI.create({
+        name: formData.name,
+        default_unit: formData.unit,
+        calories: Number(formData.calories || 0),
+        protein: Number(formData.protein || 0),
+        carbs: Number(formData.carbs || 0),
+        fat: Number(formData.fat || 0),
+      });
+
+      resetForm();
       fetchIngredients();
+      toast.success("Đã thêm nguyên liệu");
     } catch (error) {
-      console.error('Failed to add ingredient:', error);
-      setError('Failed to add ingredient');
+      setError("Không thể thêm nguyên liệu");
     }
   };
 
+  // ========================= UPDATE =========================
   const handleUpdate = async (id: number) => {
     if (!formData.name.trim()) {
-      setError('Ingredient name is required');
+      setError("Tên nguyên liệu là bắt buộc");
       return;
     }
 
     try {
-      await ingredientAPI.update(id, formData);
-      setEditingId(null);
-      setFormData({ name: '', unit: '' });
-      setError('');
+      await ingredientAPI.update(id, {
+        name: formData.name,
+        default_unit: formData.unit,
+        calories: Number(formData.calories || 0),
+        protein: Number(formData.protein || 0),
+        carbs: Number(formData.carbs || 0),
+        fat: Number(formData.fat || 0),
+      });
+
+      resetForm();
       fetchIngredients();
+      toast.success("Đã cập nhật nguyên liệu");
     } catch (error) {
-      console.error('Failed to update ingredient:', error);
-      setError('Failed to update ingredient');
+      setError("Không thể cập nhật nguyên liệu");
     }
   };
 
+  // ========================= DELETE =========================
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this ingredient? This action cannot be undone.')) return;
+    if (!window.confirm("Bạn có chắc chắn muốn xoá nguyên liệu này?"))
+      return;
 
     try {
       await ingredientAPI.delete(id);
-      setError('');
       fetchIngredients();
+      toast.success("Đã xoá nguyên liệu");
     } catch (error) {
-      console.error('Failed to delete ingredient:', error);
-      setError('Failed to delete ingredient');
+      toast.error("Không thể xoá nguyên liệu");
     }
   };
 
+  // ========================= FORM CONTROL =========================
   const startEdit = (ingredient: any) => {
     setEditingId(ingredient.ingredient_id);
-    setFormData({ name: ingredient.name, unit: ingredient.unit || '' });
-    setError('');
+
+    setFormData({
+      name: ingredient.name,
+      unit: ingredient.default_unit || "",
+      calories: ingredient.calories ?? "",
+      protein: ingredient.protein ?? "",
+      carbs: ingredient.carbs ?? "",
+      fat: ingredient.fat ?? "",
+    });
+
+    setError("");
   };
 
-  const cancelEdit = () => {
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      unit: "",
+      calories: "",
+      protein: "",
+      carbs: "",
+      fat: "",
+    });
     setEditingId(null);
     setIsAdding(false);
-    setFormData({ name: '', unit: '' });
-    setError('');
+    setError("");
   };
 
+  // ========================= UI =========================
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+        <div className="animate-spin h-12 w-12 border-b-2 border-orange-500 rounded-full"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* HEADER */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Ingredients</h1>
-          <p className="text-gray-600 mt-1">Manage recipe ingredients ({ingredients.length} total)</p>
-        </div>
+        <h1 className="text-3xl font-bold text-gray-900">Nguyên liệu</h1>
+
         {!isAdding && !editingId && (
           <button
             onClick={() => setIsAdding(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-md"
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg"
           >
-            <Plus className="h-5 w-5" />
-            <span>Add Ingredient</span>
+            <Plus className="h-5 w-5" /> Thêm nguyên liệu
           </button>
         )}
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          {error}
-        </div>
-      )}
-
+      {/* SEARCH */}
       <div className="bg-white rounded-xl shadow-md p-6">
-        <div className="mb-6 flex items-center space-x-2 bg-gray-100 rounded-lg px-4 py-2">
+        <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-lg mb-6">
           <Search className="h-5 w-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search ingredients..."
+            placeholder="Tìm nguyên liệu..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 bg-transparent outline-none text-gray-900"
+            className="bg-transparent outline-none flex-1"
           />
         </div>
 
+        {/* ADD FORM */}
         {isAdding && (
-          <div className="mb-6 p-5 bg-green-50 border border-green-200 rounded-lg">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">New Ingredient</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="e.g., Tomato, Garlic, Salt"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Unit
-                </label>
-                <input
-                  type="text"
-                  value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="e.g., cups, grams, tbsp"
-                />
-              </div>
-            </div>
-            <div className="flex space-x-3 mt-4">
-              <button
-                onClick={handleAdd}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-              >
-                <Save className="h-4 w-4" />
-                <span>Save</span>
-              </button>
-              <button
-                onClick={cancelEdit}
-                className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg font-medium transition-colors"
-              >
-                <X className="h-4 w-4" />
-                <span>Cancel</span>
-              </button>
-            </div>
-          </div>
+          <IngredientForm
+            formData={formData}
+            setFormData={setFormData}
+            submit={handleAdd}
+            cancel={resetForm}
+          />
         )}
 
-        {filteredIngredients.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredIngredients.map(ingredient => (
+        {/* LIST */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredIngredients.map((ing) =>
+            editingId === ing.ingredient_id ? (
+              <IngredientForm
+                key={ing.ingredient_id}
+                formData={formData}
+                setFormData={setFormData}
+                submit={() => handleUpdate(ing.ingredient_id)}
+                cancel={resetForm}
+              />
+            ) : (
               <div
-                key={ingredient.ingredient_id}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                key={ing.ingredient_id}
+                className="border rounded-lg p-4 shadow-sm bg-white"
               >
-                {editingId === ingredient.ingredient_id ? (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Name
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                        autoFocus
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Unit
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.unit}
-                        onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleUpdate(ingredient.ingredient_id)}
-                        className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors text-sm"
-                      >
-                        <Save className="h-4 w-4" />
-                        <span>Save</span>
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg font-medium transition-colors text-sm"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col h-full">
-                    <h3 className="text-lg font-semibold text-gray-900">{ingredient.name}</h3>
-                    {ingredient.unit && (
-                      <p className="text-gray-600 text-sm mt-2 flex-1">
-                        <span className="font-medium">Unit:</span> {ingredient.unit}
-                      </p>
-                    )}
-                    <div className="flex space-x-2 mt-4 pt-4 border-t border-gray-100">
-                      <button
-                        onClick={() => startEdit(ingredient)}
-                        className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors text-sm"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(ingredient.ingredient_id)}
-                        className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors text-sm"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  </div>
+                <h3 className="font-semibold text-lg">{ing.name}</h3>
+
+                {ing.default_unit && (
+                  <p className="text-gray-600 mt-1 text-sm">
+                    Đơn vị: {ing.default_unit}
+                  </p>
                 )}
+
+                <div className="flex gap-2 mt-4 pt-4 border-t">
+                  <button
+                    onClick={() => startEdit(ing)}
+                    className="flex-1 px-3 py-2 bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100"
+                  >
+                    <Edit2 className="h-4 w-4 inline-block mr-1" />
+                    Sửa
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(ing.ingredient_id)}
+                    className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
+                  >
+                    <Trash2 className="h-4 w-4 inline-block mr-1" />
+                    Xoá
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">
-              {searchTerm ? 'No ingredients found matching your search.' : 'No ingredients yet. Add your first ingredient!'}
-            </p>
-          </div>
-        )}
+            )
+          )}
+        </div>
       </div>
     </div>
   );
 };
+
+/* ======================================================
+   COMPONENT: FORM dùng chung cho ADD + EDIT
+====================================================== */
+
+const IngredientForm = ({ formData, setFormData, submit, cancel }: any) => {
+  return (
+    <div className="p-5 bg-orange-50 border border-orange-200 rounded-lg mb-6">
+      <h3 className="text-lg font-semibold mb-4">Thông tin nguyên liệu</h3>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <Field label="Tên *" value={formData.name} onChange={(v) => setFormData({ ...formData, name: v })} />
+        <Field label="Đơn vị" value={formData.unit} onChange={(v) => setFormData({ ...formData, unit: v })} />
+
+        <Field label="Calories / 100g" type="number" value={formData.calories} onChange={(v) => setFormData({ ...formData, calories: v })} />
+        <Field label="Protein (g)" type="number" value={formData.protein} onChange={(v) => setFormData({ ...formData, protein: v })} />
+
+        <Field label="Carbs (g)" type="number" value={formData.carbs} onChange={(v) => setFormData({ ...formData, carbs: v })} />
+        <Field label="Fat (g)" type="number" value={formData.fat} onChange={(v) => setFormData({ ...formData, fat: v })} />
+      </div>
+
+      <div className="flex gap-2 mt-4">
+        <button onClick={submit} className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2">
+          <Save className="h-4 w-4" /> Lưu
+        </button>
+
+        <button onClick={cancel} className="px-4 py-2 border rounded-lg hover:bg-gray-50 flex items-center gap-2">
+          <X className="h-4 w-4" /> Huỷ
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const Field = ({ label, value, onChange, type = "text" }: any) => (
+  <div>
+    <label className="text-sm font-medium text-gray-700">{label}</label>
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-4 py-2 border rounded-lg focus:border-orange-500 mt-1"
+    />
+  </div>
+);

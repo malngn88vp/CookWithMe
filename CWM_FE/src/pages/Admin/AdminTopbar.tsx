@@ -14,6 +14,8 @@ export const AdminTopbar = () => {
   return (
     <div className="bg-white border-b border-gray-200 shadow-sm">
       <div className="px-6 py-4 flex items-center justify-between">
+
+        {/* --- Tiêu đề + lời chào --- */}
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Admin Dashboard</h2>
           <p className="text-sm text-gray-500">
@@ -21,27 +23,38 @@ export const AdminTopbar = () => {
           </p>
         </div>
 
+        {/* --- Thời gian + Avatar --- */}
         <div className="flex items-center space-x-6">
+
+          {/* Thời gian */}
           <div className="flex items-center space-x-2 text-gray-600">
             <Clock className="h-5 w-5" />
             <span className="text-sm font-medium">
-              {time.toLocaleTimeString('en-US', {
+              {time.toLocaleTimeString('vi-VN', {
                 hour: '2-digit',
                 minute: '2-digit',
-                hour12: true,
+                second: '2-digit',
+                hour12: false,
               })}
             </span>
           </div>
 
+          {/* Avatar + thông tin admin */}
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center text-white font-bold">
+            <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center text-white font-bold uppercase">
               {user?.name?.[0] || 'A'}
             </div>
+
             <div className="hidden sm:block">
-              <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-              <p className="text-xs text-gray-500">{user?.role}</p>
+              <p className="text-sm font-medium text-gray-900">
+                {user?.name || 'Admin'}
+              </p>
+              <p className="text-xs text-gray-500">
+                {user?.role === 'admin' ? 'Quản trị viên' : user?.role || 'Admin'}
+              </p>
             </div>
           </div>
+
         </div>
       </div>
     </div>

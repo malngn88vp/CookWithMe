@@ -25,11 +25,15 @@ const RecipeDetail = () => {
   const [isFavorite, setIsFavorite] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // ⭐ Nutrition State
+  const [nutrition, setNutrition] = useState<any>(null);
+
   useEffect(() => {
     if (id) {
       fetchRecipe();
       fetchComments();
       checkFavoriteStatus();
+      fetchNutrition(); // ⭐ NEW
     }
   }, [id, user]);
 
@@ -44,6 +48,26 @@ const RecipeDetail = () => {
       toast.error("Không thể tải công thức");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchNutrition = async () => {
+    try {
+      const res = await recipeAPI.getNutrition(id!);
+
+      const nutri = res.data;
+
+      setNutrition({
+        calories: nutri?.per_serving?.calories ?? 0,
+        protein: nutri?.per_serving?.protein ?? 0,
+        carbs: nutri?.per_serving?.carbs ?? 0,
+        fat: nutri?.per_serving?.fat ?? 0,
+        servings: nutri?.servings ?? 1,
+        total: nutri?.total ?? null
+      });
+
+    } catch (err) {
+      console.error("Lỗi tải dinh dưỡng:", err);
     }
   };
 
@@ -176,6 +200,7 @@ const RecipeDetail = () => {
 
       <div className="container mx-auto px-4 py-8">
         <div className="mx-auto max-w-4xl">
+
           {/* Ảnh */}
           <div className="relative mb-8 overflow-hidden rounded-2xl">
             {recipeImage ? (
@@ -269,6 +294,47 @@ const RecipeDetail = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* ⭐ Nutrition (NEW) */}
+          {nutrition && (
+            <Card className="mb-8">
+              <CardContent className="p-6">
+                <h2 className="mb-4 text-2xl font-bold">Giá trị dinh dưỡng / khẩu phần</h2>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+
+                  <div className="p-4 border rounded-xl bg-muted">
+                    <p className="text-2xl font-bold text-primary">
+                      {Math.round(nutrition.calories)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Calories</p>
+                  </div>
+
+                  <div className="p-4 border rounded-xl bg-muted">
+                    <p className="text-2xl font-bold text-blue-600">
+                      {Number(nutrition.protein).toFixed(1)} g
+                    </p>
+                    <p className="text-sm text-muted-foreground">Protein</p>
+                  </div>
+
+                  <div className="p-4 border rounded-xl bg-muted">
+                    <p className="text-2xl font-bold text-orange-600">
+                      {Number(nutrition.carbs).toFixed(1)} g
+                    </p>
+                    <p className="text-sm text-muted-foreground">Carbs</p>
+                  </div>
+
+                  <div className="p-4 border rounded-xl bg-muted">
+                    <p className="text-2xl font-bold text-yellow-600">
+                      {Number(nutrition.fat).toFixed(1)} g
+                    </p>
+                    <p className="text-sm text-muted-foreground">Fat</p>
+                  </div>
+
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Cách làm */}
           <Card className="mb-8">
@@ -370,6 +436,7 @@ const RecipeDetail = () => {
               </div>
             </CardContent>
           </Card>
+
         </div>
       </div>
     </div>

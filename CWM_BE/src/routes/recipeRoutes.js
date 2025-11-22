@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const recipeController = require("../controllers/recipeController");
+const nutritionController = require("../controllers/nutritionController");
 const upload = require("../middlewares/upload");
 const { isAuthenticated, isOwnerOrAdmin } = require("../middlewares/roleCheck");
 const optionalAuth = require("../middlewares/optionalAuth");
@@ -12,8 +13,12 @@ const getRecipeOwner = async (req) => {
   return recipe ? recipe.user_id : null;
 };
 
-// 🟢 Public + optional auth (ai cũng gọi được)
+// 🟢 Public + optional auth
 router.get("/", optionalAuth, recipeController.getAllRecipes);
+
+// 🔥 Route nutrition — phải đặt TRƯỚC /:id
+router.get("/:id/nutrition", optionalAuth, nutritionController.getNutrition);
+
 router.get("/:id", optionalAuth, recipeController.getRecipeById);
 
 // 🟡 Cần đăng nhập

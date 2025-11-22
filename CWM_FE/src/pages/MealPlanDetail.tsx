@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { mealPlanAPI, recipeAPI, shoppingListAPI } from "@/services/api";
 import { toast } from "sonner";
-import { Save, ShoppingCart, Plus } from "lucide-react";
+import { Save, ShoppingCart, Plus, X, CalendarDays } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 const MealPlanDetail = () => {
-  const { id } = useParams(); // mealplan_id từ URL
+  const { id } = useParams();
 
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
@@ -18,7 +18,7 @@ const MealPlanDetail = () => {
   const [allRecipes, setAllRecipes] = useState<any[]>([]);
   const [tempMeals, setTempMeals] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedMealTime, setSelectedMealTime] = useState<string>("");
+  const [selectedMealTime, setSelectedMealTime] = useState("");
   const [showDialog, setShowDialog] = useState(false);
 
   const mealTimes = [
@@ -27,31 +27,49 @@ const MealPlanDetail = () => {
     { icon: "🌙", name: "Tối" },
   ];
 
-  // -------------------------
-  // Lấy label tên thứ
-  // -------------------------
-  const getDayLabel = (date: Date) => {
-    const day = date.getDay();
-    return ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"][day];
+  const toDateLocal = (date: Date) => date.toISOString().split("T")[0];
+
+  const convertMealTypeReverse = (type: any) => {
+    const t = String(type || "").toLowerCase();
+    if (t.includes("breakfast")) return "Sáng";
+    if (t.includes("lunch")) return "Trưa";
+    if (t.includes("dinner")) return "Tối";
+    return "Sáng";
   };
 
-  // -------------------------
-  // Load dữ liệu
-  // -------------------------
+  const convertMealType = (label: string) => {
+    if (label === "Sáng") return "Breakfast";
+    if (label === "Trưa") return "Lunch";
+    if (label === "Tối") return "Dinner";
+    return "Snack";
+  };
+
+  const getDayLabel = (d: Date) =>
+    ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"][d.getDay()];
+
+  // ================= FETCH =================
   useEffect(() => {
     if (id) {
       fetchPlan(id);
       fetchAllRecipes();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const fetchAllRecipes = async () => {
     try {
       const res = await recipeAPI.getAll();
       const data = res.data?.recipes ?? res.data ?? [];
-      setAllRecipes(Array.isArray(data) ? data : []);
+
+      setAllRecipes(
+        data.map((r: any) => ({
+          ...r,
+          recipe_id: r.recipe_id ?? r.id,
+          title: r.title ?? r.name ?? "Không rõ",
+        }))
+      );
     } catch {
-      toast.error("Lỗi tải danh sách món ăn");
+      toast.error("Không thể tải danh sách món ăn");
     }
   };
 
@@ -59,321 +77,257 @@ const MealPlanDetail = () => {
     try {
       const res = await mealPlanAPI.getById(planId);
       const plan = res.data;
-      console.log("Kế hoạch tải về:", plan);
 
-      setStartDate(new Date(plan.start_date));
-      setEndDate(new Date(plan.end_date));
+      if (plan.start_date) setStartDate(new Date(plan.start_date));
+      if (plan.end_date) setEndDate(new Date(plan.end_date));
 
-      if (Array.isArray(plan.recipes)) {
-        const mapped = plan.recipes.map((item: any) => {
-          const meal_time = convertMealTypeReverse(item.MealPlanRecipe?.meal_type) || "Sáng";
-          const title = item.title || "Không rõ";
+      const mapped =
+        plan.recipes?.map((item: any) => {
+          const mp = item.MealPlanRecipe;
+          const dateISO = mp.scheduled_date.includes("T")
+            ? mp.scheduled_date.split("T")[0]
+            : mp.scheduled_date;
 
-          const dateObj = new Date(item.MealPlanRecipe?.scheduled_date);
-          const year = dateObj.getFullYear();
-          const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-          const day = String(dateObj.getDate()).padStart(2, "0");
-          const dateISO = `${year}-${month}-${day}`;
+          return {
+            unique_id: `${mp.mealplan_id}-${mp.recipe_id}-${mp.meal_type}-${dateISO}`,
+            recipe_id: mp.recipe_id,
+            title: item.title,
+            date: dateISO,
+            meal_time: convertMealTypeReverse(mp.meal_type),
+            isTemp: false,
+          };
+        }) ?? [];
 
-          return { date: dateISO, meal_time, title };
-        });
-        setRecipes(mapped);
-      } else {
-        setRecipes([]);
-      }
-    } catch (err: any) {
-      console.error("❌ fetchPlan lỗi:", err);
+      setRecipes(mapped);
+    } catch {
       toast.error("Không thể tải kế hoạch");
     }
   };
 
-  // -------------------------
-  // Chuyển meal type
-  // -------------------------
-  const convertMealType = (label: string) => {
-    switch (label) {
-      case "Sáng":
-        return "Breakfast";
-      case "Trưa":
-        return "Lunch";
-      case "Tối":
-        return "Dinner";
-      default:
-        return "Snack";
-    }
-  };
-
-  const convertMealTypeReverse = (type: string) => {
-    switch (type) {
-      case "Breakfast":
-        return "Sáng";
-      case "Lunch":
-        return "Trưa";
-      case "Dinner":
-        return "Tối";
-      default:
-        return "Sáng";
-    }
-  };
-
-  // -------------------------
-  // Tạo danh sách ngày trong plan
-  // -------------------------
+  // ================= RENDER =================
   const getPlanDates = () => {
     if (!startDate || !endDate) return [];
-    const list = [];
-    let current = new Date(startDate);
-    while (current <= endDate) {
-      list.push(new Date(current));
-      current.setDate(current.getDate() + 1);
+    const arr: Date[] = [];
+    const cur = new Date(startDate);
+    const end = new Date(endDate);
+
+    while (cur <= end) {
+      arr.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
     }
-    return list;
+    return arr;
   };
 
-  // -------------------------
-  // Lấy món theo ngày + bữa
-  // -------------------------
-  const getRecipesFor = (date: Date, mealTime: string) => {
-    const dateISO = date.toISOString().split("T")[0];
-    const saved = recipes.filter(
-      (r) => r.date === dateISO && r.meal_time === mealTime
-    );
-    console.log("Món đã lưu:", saved);
+  const getRecipesFor = (date: Date, meal: string) => {
+    const d = toDateLocal(date);
+
+    const saved = recipes.filter((r) => r.date === d && r.meal_time === meal);
 
     const temp = tempMeals
-      .filter((t) => t.date === dateISO && t.meal_time === mealTime)
-      .map((t) => t.recipe);
+      .filter((t) => t.date === d && t.meal_time === meal)
+      .map((t) => ({
+        unique_id: `temp-${t.recipe.recipe_id}-${t.date}-${t.meal_time}`,
+        recipe_id: t.recipe.recipe_id,
+        title: t.recipe.title,
+        date: t.date,
+        meal_time: t.meal_time,
+        isTemp: true,
+      }));
 
     return [...saved, ...temp];
   };
 
-  // -------------------------
-  // Chọn món tạm
-  // -------------------------
+  // ================= ACTION =================
   const handleAddRecipe = (recipe: any) => {
-    if (!selectedDate) return;
+    const dateISO = toDateLocal(selectedDate!);
 
-    const dateISO = selectedDate.toISOString().split("T")[0];
+    // Prevent duplicate within same date+meal (optional)
+    const exists = tempMeals.some(
+      (t) => t.recipe.recipe_id === recipe.recipe_id && t.date === dateISO && t.meal_time === selectedMealTime
+    );
+    if (exists) {
+      toast.warning("Món này đã tồn tại ở bữa đó (tạm thời).");
+      return;
+    }
 
     setTempMeals((prev) => [
       ...prev,
-      { date: dateISO, meal_time: selectedMealTime, recipe },
+      { recipe, date: dateISO, meal_time: selectedMealTime },
     ]);
 
-    toast.success("Đã thêm món vào kế hoạch tạm");
+    toast.success("Đã thêm món");
     setShowDialog(false);
   };
 
-  // -------------------------
-  // Lưu tất cả món trong kế hoạch
-  // -------------------------
-  const handleSaveMealPlan = async () => {
-    if (tempMeals.length === 0) {
-      toast.error("Bạn chưa chọn món nào");
+  const handleDeleteRecipe = async (item: any) => {
+    if (item.isTemp) {
+      setTempMeals((prev) =>
+        prev.filter(
+          (t) =>
+            !(
+              t.recipe.recipe_id === item.recipe_id &&
+              t.date === item.date &&
+              t.meal_time === item.meal_time
+            )
+        )
+      );
       return;
     }
+
     try {
-      for (const item of tempMeals) {
-        await mealPlanAPI.addRecipe(id!, {
-          recipe_id: item.recipe.recipe_id,
-          meal_type: convertMealType(item.meal_time),
-          scheduled_date: item.date,
-        });
-      }
-
-      toast.success("Đã lưu kế hoạch!");
-
-      // Bao try-catch riêng cho fetchPlan
-      try {
-        await fetchPlan(id!);
-      } catch (fetchErr) {
-        console.error("❌ fetchPlan thất bại:", fetchErr);
-      }
-
-      setTempMeals([]);
-    } catch (err) {
-      console.error("❌ Lỗi lưu kế hoạch:", err);
-      toast.error("Lỗi lưu kế hoạch");
+      await mealPlanAPI.removeRecipe(id!, item.recipe_id);
+      toast.success("Đã xoá món");
+      fetchPlan(id!);
+    } catch {
+      toast.error("Không thể xoá");
     }
   };
 
-  // -------------------------
-  // Xuất PDF Shopping List
-  // -------------------------
-  const handleGenerateShoppingListPDF = async () => {
-  if (!id) return toast.error("Chưa có kế hoạch");
-
-  try {
-    await shoppingListAPI.generate(id);
-    const res = await shoppingListAPI.get(id);
-
-    const list = res.data;
-    if (!Array.isArray(list) || list.length === 0)
-      return toast.error("Không có nguyên liệu");
-
-    // 🔹 Hàm chuẩn hóa unit
-    const normalizeUnit = (unit: string) => {
-      unit = unit.toLowerCase();
-      if (unit === "kg") return "g";
-      if (unit === "l") return "ml";
-      return unit;
-    };
-
-    // 🔹 Gộp nguyên liệu trùng với unit chuẩn hóa
-    const mergedIngredients: Record<string, { quantity: number; unit: string }> = {};
-
-    list.forEach((item: any) => {
-      const ingredientName = item.Ingredient?.name || "Không rõ";
-      let qty = item.quantity != null ? parseFloat(item.quantity) : 0;
-      let unit = item.unit || "-";
-
-      const normalizedUnit = normalizeUnit(unit);
-
-      // Chuyển số lượng theo unit chuẩn (kg → g, l → ml)
-      if (unit.toLowerCase() === "kg") qty *= 1000; // kg → g
-      if (unit.toLowerCase() === "l") qty *= 1000;  // l → ml
-
-      const key = `${ingredientName}||${normalizedUnit}`;
-
-      if (mergedIngredients[key]) {
-        mergedIngredients[key].quantity += qty;
-      } else {
-        mergedIngredients[key] = { quantity: qty, unit: normalizedUnit };
+  const handleSave = async () => {
+    try {
+      for (const t of tempMeals) {
+        await mealPlanAPI.addRecipe(id!, {
+          recipe_id: t.recipe.recipe_id,
+          meal_type: convertMealType(t.meal_time),
+          scheduled_date: t.date,
+        });
       }
-    });
+      toast.success("Đã lưu");
+      setTempMeals([]);
+      fetchPlan(id!);
+    } catch (err) {
+      console.error("Lưu lỗi:", err);
+      toast.error("Lưu thất bại");
+    }
+  };
 
-    // 🔹 Chuyển về mảng để in PDF
-    const body = Object.entries(mergedIngredients).map(([key, info]) => {
-      const [name] = key.split("||");
-      let { quantity, unit } = info;
+  // PDF xuất danh sách mua sắm
+  const handlePDF = async () => {
+    try {
+      await shoppingListAPI.generate(id!);
+      const res = await shoppingListAPI.get(id!);
 
-      // Hiển thị hợp lý: >1000 g → kg, >1000 ml → l
-      if (unit === "g" && quantity >= 1000) {
-        quantity = quantity / 1000;
-        unit = "kg";
-      }
-      if (unit === "ml" && quantity >= 1000) {
-        quantity = quantity / 1000;
-        unit = "l";
-      }
+      const list = res.data;
+      if (!list.length) return toast.error("Không có nguyên liệu");
 
-      return [name, quantity.toFixed(2), unit];
-    });
+      const merged: any = {};
+      list.forEach((i: any) => {
+        const name = i.Ingredient?.name || "Không rõ";
+        const unit = i.unit || "";
+        const key = `${name}-${unit}`;
 
-    const pdf = new jsPDF();
-    pdf.text("DANH SÁCH MUA SẮM", 70, 15);
+        merged[key] = merged[key] || { name, quantity: 0, unit };
+        merged[key].quantity += Number(i.quantity);
+      });
 
-    autoTable(pdf, {
-      startY: 30,
-      head: [["Nguyên liệu", "Số lượng", "Đơn vị"]],
-      body,
-    });
+      const pdf = new jsPDF();
+      pdf.text("Danh sách mua sắm", 70, 10);
 
-    pdf.save("shopping-list.pdf");
-    toast.success("Đã tải PDF");
-  } catch (err) {
-    console.error(err);
-    toast.error("Không thể tạo danh sách");
-  }
-};
+      autoTable(pdf, {
+        head: [["Nguyên liệu", "Số lượng", "Đơn vị"]],
+        body: Object.values(merged).map((i: any) => [i.name, i.quantity, i.unit]),
+      });
 
+      pdf.save("shopping-list.pdf");
+      toast.success("Đã xuất PDF");
+    } catch {
+      toast.error("Không thể tạo PDF");
+    }
+  };
 
-  // -------------------------
-  // Render
-  // -------------------------
+  // ================= UI =================
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <main className="container mx-auto p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Chi tiết kế hoạch bữa ăn</h1>
+      {/* HERO */}
+      <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white py-10 mb-10">
+        <div className="max-w-5xl mx-auto px-6">
+          <h1 className="text-4xl font-bold mb-2 flex items-center gap-2">
+            <CalendarDays className="h-8 w-8" /> Chi tiết kế hoạch bữa ăn
+          </h1>
+          <p className="text-orange-100 text-lg">Quản lý chi tiết từng bữa ăn trong kế hoạch của bạn</p>
+        </div>
+      </div>
 
-          <div className="flex gap-2">
-            <Button onClick={handleSaveMealPlan} className="gap-2">
-              <Save className="w-4 h-4" /> Lưu kế hoạch
-            </Button>
+      <main className="max-w-6xl mx-auto px-6 pb-10">
+        {/* ACTION BAR */}
+        <div className="flex justify-end mb-6 gap-3">
+          <Button onClick={handleSave} className="bg-orange-500 hover:bg-orange-600 text-white gap-2 rounded-xl">
+            <Save className="w-4 h-4" /> Lưu thay đổi
+          </Button>
 
-            <Button onClick={handleGenerateShoppingListPDF} className="gap-2">
-              <ShoppingCart className="w-4 h-4" /> Xuất danh sách
-            </Button>
-          </div>
+          <Button onClick={handlePDF} className="bg-white text-orange-600 border border-orange-300 hover:bg-orange-50 gap-2 rounded-xl">
+            <ShoppingCart className="w-4 h-4" /> Xuất danh sách
+          </Button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-7">
-          {getPlanDates().map((date, idx) => {
-            return (
-              <Card key={idx} className="overflow-hidden hover:shadow-md transition">
-                <div className="border-b bg-secondary/50 p-3 text-center">
-                  <div className="text-xs font-medium text-muted-foreground">
-                    {getDayLabel(date)}
-                  </div>
-                  <div className="text-2xl font-bold">{date.getDate()}</div>
-                </div>
+        {/* GRID NGÀY */}
+        <div className="grid gap-6 justify-center md:grid-cols-4 lg:grid-cols-7">
+          {getPlanDates().map((date, idx) => (
+            <Card key={idx} className="overflow-hidden rounded-2xl bg-white shadow-lg border border-orange-100 hover:shadow-xl transition">
+              {/* Header ngày */}
+              <div className="p-4 bg-gradient-to-b from-orange-400 to-orange-300 text-center text-white">
+                <div className="text-xs opacity-80">{getDayLabel(date)}</div>
+                <div className="text-3xl font-bold">{date.getDate()}</div>
+              </div>
 
-                <div className="p-3 space-y-3">
-                  {mealTimes.map((meal) => (
-                    <div
-                      key={meal.name}
-                      className="group flex items-start gap-2 border border-dashed rounded-lg p-2 hover:border-primary hover:bg-primary/5 transition"
-                    >
-                      <span className="text-lg">{meal.icon}</span>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium">{meal.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {getRecipesFor(date, meal.name).length > 0
-                            ? getRecipesFor(date, meal.name).map((r, i) => (
-                                <div key={i}>{r.title}</div>
-                              ))
-                            : "Chưa có món"}
-                        </div>
-                      </div>
-
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => {
-                          setSelectedDate(date);
-                          setSelectedMealTime(meal.name);
-                          setShowDialog(true);
-                        }}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
+              {/* Meal container */}
+              <div className="p-3 space-y-5">
+                {mealTimes.map((meal) => (
+                  <div key={meal.name} className="space-y-1">
+                    <div className="flex items-center gap-2 font-semibold text-sm text-orange-700">
+                      <span>{meal.icon}</span>
+                      {meal.name}
                     </div>
-                  ))}
-                </div>
-              </Card>
-            );
-          })}
+
+                    {/* List */}
+                    {getRecipesFor(date, meal.name).length === 0 ? (
+                      <div className="text-xs text-gray-400 italic">Chưa có món</div>
+                    ) : (
+                      getRecipesFor(date, meal.name).map((r) => (
+                        <div key={r.unique_id} className="flex items-center justify-between bg-white border border-orange-100 shadow-sm px-3 py-2 rounded-xl hover:bg-orange-50 transition group">
+                          <span className="text-sm text-gray-700">{r.title}</span>
+
+                          <button onClick={() => handleDeleteRecipe(r)} className="p-1 text-red-500 hover:bg-red-100 rounded-md hidden group-hover:block">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+
+                    {/* Add button */}
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-orange-600 hover:bg-orange-100 rounded-full border border-orange-200" onClick={() => {
+                      setSelectedDate(date);
+                      setSelectedMealTime(meal.name);
+                      setShowDialog(true);
+                    }}>
+                      <Plus size={16} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ))}
         </div>
       </main>
 
+      {/* Dialog chọn món */}
       {showDialog && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-[400px] shadow-lg">
-            <h3 className="text-lg font-semibold mb-3">
-              Chọn món cho {selectedDate?.toISOString().split("T")[0]} – {selectedMealTime}
-            </h3>
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white w-[400px] p-6 rounded-2xl shadow-xl border border-orange-100">
+            <h2 className="font-bold text-lg mb-3">Chọn món – {selectedMealTime}</h2>
 
-            <div className="max-h-64 overflow-y-auto space-y-2">
-              {allRecipes.map((recipe) => (
-                <div
-                  key={recipe.recipe_id}
-                  className="p-2 border rounded hover:bg-gray-100 cursor-pointer"
-                  onClick={() => handleAddRecipe(recipe)}
-                >
-                  {recipe.title}
+            <div className="max-h-64 overflow-y-auto space-y-1">
+              {allRecipes.map((r) => (
+                <div key={r.recipe_id} onClick={() => handleAddRecipe(r)} className="p-2 border rounded-xl hover:bg-gray-50 cursor-pointer transition">
+                  {r.title}
                 </div>
               ))}
             </div>
 
             <div className="flex justify-end mt-4">
-              <Button variant="secondary" onClick={() => setShowDialog(false)}>
-                Đóng
-              </Button>
+              <Button variant="secondary" className="rounded-xl" onClick={() => setShowDialog(false)}>Đóng</Button>
             </div>
           </div>
         </div>

@@ -11,14 +11,31 @@ module.exports = (sequelize, DataTypes) => {
       images: { type: DataTypes.JSONB, allowNull: true },
       video_url: { type: DataTypes.STRING(512) },
       cooking_time: { type: DataTypes.INTEGER, allowNull: true },
+      servings: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 1 },
+
       status: { 
         type: DataTypes.ENUM('Pending', 'Approved', 'Rejected'), 
         defaultValue: 'Pending' 
       },
-      difficulty_level: {               // ✅ Thêm dòng này
+
+      difficulty_level: {
         type: DataTypes.ENUM('Dễ', 'Trung bình', 'Khó'),
         defaultValue: 'Dễ'
       },
+
+      // ⭐⭐ Thêm MEAL TYPE vào đây ⭐⭐
+      meal_type: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: ["Breakfast", "Lunch", "Dinner"]  // tương đương Any
+      },
+
+      // ⭐ Nutrition Cache
+      cached_calories: { type: DataTypes.FLOAT, defaultValue: 0 },
+      cached_protein: { type: DataTypes.FLOAT, defaultValue: 0 },
+      cached_carbs: { type: DataTypes.FLOAT, defaultValue: 0 },
+      cached_fat: { type: DataTypes.FLOAT, defaultValue: 0 },
+
       created_at: { type: DataTypes.DATE, defaultValue: sequelize.literal('CURRENT_TIMESTAMP') },
       updated_at: { type: DataTypes.DATE, defaultValue: sequelize.literal('CURRENT_TIMESTAMP') }
     },

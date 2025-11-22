@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChefHat, Heart, Calendar, User, LogOut, LayoutDashboard, Search } from 'lucide-react';
+import { ChefHat, Heart, User, LogOut, LayoutDashboard, Search, KeyRound } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +33,8 @@ const Navbar = () => {
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4">
+        
+        {/* Logo */}
         <Link to="/" className="flex items-center gap-2 text-xl font-bold">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <ChefHat className="h-5 w-5 text-white" />
@@ -42,9 +44,6 @@ const Navbar = () => {
 
         {/* Navigation Links */}
         <div className="hidden items-center gap-6 md:flex">
-          {/* <Link to="/" className="text-sm font-medium transition-colors hover:text-primary">
-            Trang chủ
-          </Link> */}
           <Link to="/recipes" className="text-sm font-medium transition-colors hover:text-primary">
             Công thức
           </Link>
@@ -68,6 +67,7 @@ const Navbar = () => {
           </div>
         </div>
 
+        {/* User Menu */}
         <div className="flex items-center gap-2">
           {user ? (
             <>
@@ -77,6 +77,7 @@ const Navbar = () => {
                   Yêu thích
                 </Link>
               </Button>
+
               <Button variant="default" size="sm" asChild>
                 <Link to="/recipes/new">Thêm công thức</Link>
               </Button>
@@ -88,18 +89,32 @@ const Navbar = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+
+                  {/* Hồ sơ */}
                   <DropdownMenuItem asChild>
                     <Link to="/profile">
                       <User className="mr-2 h-4 w-4" />
                       Hồ sơ
                     </Link>
                   </DropdownMenuItem>
+
+                  {/* ⭐ Đổi mật khẩu */}
+                  <DropdownMenuItem asChild>
+                    <Link to="/change-password">
+                      <KeyRound className="mr-2 h-4 w-4" />
+                      Đổi mật khẩu
+                    </Link>
+                  </DropdownMenuItem>
+
+                  {/* Yêu thích (mobile) */}
                   <DropdownMenuItem asChild className="md:hidden">
                     <Link to="/favorites">
                       <Heart className="mr-2 h-4 w-4" />
                       Yêu thích
                     </Link>
                   </DropdownMenuItem>
+
+                  {/* Admin */}
                   {user.role === 'admin' && (
                     <>
                       <DropdownMenuSeparator />
@@ -111,13 +126,18 @@ const Navbar = () => {
                       </DropdownMenuItem>
                     </>
                   )}
+
                   <DropdownMenuSeparator />
+
+                  {/* Logout */}
                   <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
                     Đăng xuất
                   </DropdownMenuItem>
+
                 </DropdownMenuContent>
               </DropdownMenu>
+
             </>
           ) : (
             <>

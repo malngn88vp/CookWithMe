@@ -1,5 +1,5 @@
-// controllers/commentController.js
 const { Comment, Recipe, User } = require("../models");
+const badWords = require("../utils/badWords");
 
 module.exports = {
   // 💬 Thêm bình luận
@@ -11,6 +11,31 @@ module.exports = {
 
       if (!content?.trim()) {
         return res.status(400).json({ message: "Nội dung bình luận không được để trống" });
+      }
+
+      const user = await User.findByPk(userId);
+      const containsBadWord = badWords.some(word =>
+        content.toLowerCase().includes(word.toLowerCase())
+      );
+
+      if (containsBadWord) {
+        // tăng warning_count
+        user.warning_count += 1;
+        await user.save();
+
+        // Cảnh báo user, không tự động khóa
+        const messages = [
+          "Cảnh báo lần 1: Bình luận chứa từ ngữ không phù hợp và bị từ chối.",
+          "Cảnh báo lần 2: Nếu tiếp tục vi phạm, admin sẽ xem xét khóa tài khoản."
+        ];
+
+        const warningMessage = messages[user.warning_count - 1] || 
+          "Cảnh báo: Vi phạm từ ngữ không phù hợp.";
+
+        return res.status(400).json({
+          warning: true,
+          message: warningMessage
+        });
       }
 
       const recipe = await Recipe.findByPk(recipeId);
@@ -41,7 +66,7 @@ module.exports = {
           {
             model: User,
             as: "user",
-            attributes: ["user_id", "name", "avatar_url"], // <- avatar_url sẽ có
+            attributes: ["user_id", "name", "avatar_url", "warning_count"],
           },
         ],
         order: [["created_at", "DESC"]],

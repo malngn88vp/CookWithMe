@@ -1,11 +1,17 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom"; // ⭐ thêm useLocation
 import { recipeAPI, categoryAPI, ingredientAPI } from "@/services/api";
 import Navbar from "@/components/Navbar";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Clock, Users, ChefHat, Filter, X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search, Clock, ChefHat, Filter, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const Recipes = () => {
@@ -19,8 +25,11 @@ const Recipes = () => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
   const [maxCookingTime, setMaxCookingTime] = useState<number | null>(null);
-
+  const [selectedIngredients, setSelectedIngredients] = useState<number[]>([]);
+  const [ingredientSelectValue, setIngredientSelectValue] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+
+  const location = useLocation(); // ⭐ Lấy URL hiện tại
 
   const difficultyLevels = [
     { label: "Dễ", value: "easy" },
@@ -28,7 +37,14 @@ const Recipes = () => {
     { label: "Khó", value: "hard" },
   ];
 
-  // Gọi dữ liệu
+  // ⭐ NHẬN search từ URL (?search=...)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const search = params.get("search") || "";
+    setSearchName(search);
+  }, [location.search]);
+
+  // Fetch dữ liệu
   useEffect(() => {
     fetchData();
   }, []);
@@ -43,7 +59,13 @@ const Recipes = () => {
 
       setRecipes(recipesRes.data?.recipes || recipesRes.data || []);
       setCategories(categoriesRes.data?.categories || categoriesRes.data || []);
-      setIngredients(ingredientsRes.data?.ingredients || ingredientsRes.data || []);
+
+      setIngredients(
+        ingredientsRes.data?.ingredients ||
+          ingredientsRes.data?.data ||
+          (Array.isArray(ingredientsRes.data) ? ingredientsRes.data : []) ||
+          []
+      );
     } catch (error) {
       console.error("Lỗi tải dữ liệu:", error);
     } finally {
@@ -51,46 +73,77 @@ const Recipes = () => {
     }
   };
 
-  // Lọc công thức
+  // ⭐ Lọc công thức
   const filteredRecipes = useMemo(() => {
     return recipes.filter((r) => {
       const matchesName = r.title?.toLowerCase().includes(searchName.toLowerCase());
+
       const matchesCategory =
         selectedCategory === "all" ||
         r.categories?.some((c: any) => c.category_id === Number(selectedCategory));
+
       const matchesDifficulty =
         selectedDifficulty === "all" || r.difficulty_level === selectedDifficulty;
+
       const totalTime = (r.cooking_time || 0) + (r.prep_time || 0);
       const matchesTime = maxCookingTime ? totalTime <= maxCookingTime : true;
-      return matchesName && matchesCategory && matchesDifficulty && matchesTime;
-    });
-  }, [recipes, searchName, selectedCategory, selectedDifficulty, maxCookingTime]);
 
+      const matchesIngredients =
+        selectedIngredients.length === 0 ||
+        selectedIngredients.every((ingId) =>
+          r.ingredients?.some((i: any) => i.ingredient_id === ingId)
+        );
+
+      return (
+        matchesName &&
+        matchesCategory &&
+        matchesDifficulty &&
+        matchesTime &&
+        matchesIngredients
+      );
+    });
+  }, [
+    recipes,
+    searchName,
+    selectedCategory,
+    selectedDifficulty,
+    maxCookingTime,
+    selectedIngredients,
+  ]);
+
+  // Reset bộ lọc
   const clearFilters = () => {
     setSearchName("");
     setSelectedCategory("all");
     setSelectedDifficulty("all");
     setMaxCookingTime(null);
+    setSelectedIngredients([]);
+    setIngredientSelectValue("");
   };
 
   const activeFilters =
     (searchName ? 1 : 0) +
     (selectedCategory !== "all" ? 1 : 0) +
     (selectedDifficulty !== "all" ? 1 : 0) +
-    (maxCookingTime ? 1 : 0);
+    (maxCookingTime ? 1 : 0) +
+    (selectedIngredients.length > 0 ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
+
+      {/* Header */}
       <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white py-12">
         <div className="container mx-auto px-4">
           <h1 className="text-4xl font-bold mb-3">Tất cả công thức</h1>
-          <p className="text-orange-100 text-lg">Tìm kiếm và lọc công thức bạn yêu thích</p>
+          <p className="text-orange-100 text-lg">
+            Tìm kiếm và lọc công thức bạn yêu thích
+          </p>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* --- Sidebar Filters --- */}
+        {/* Sidebar */}
         <div className={`lg:col-span-1 ${showFilters ? "block" : "hidden lg:block"}`}>
           <div className="bg-white p-6 rounded-xl shadow-md sticky top-24">
             <div className="flex items-center justify-between mb-4">
@@ -111,7 +164,7 @@ const Recipes = () => {
               </p>
             )}
 
-            {/* Tìm kiếm tên */}
+            {/* Tên công thức */}
             <div className="mb-6">
               <label className="block text-sm font-semibold mb-2">Tên công thức</label>
               <div className="relative">
@@ -120,7 +173,7 @@ const Recipes = () => {
                   value={searchName}
                   onChange={(e) => setSearchName(e.target.value)}
                   placeholder="Nhập tên món..."
-                  className="pl-9"
+                  className="pl-9 h-11 rounded-lg"
                 />
               </div>
             </div>
@@ -129,7 +182,7 @@ const Recipes = () => {
             <div className="mb-6">
               <label className="block text-sm font-semibold mb-2">Danh mục</label>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 rounded-lg">
                   <SelectValue placeholder="Chọn danh mục" />
                 </SelectTrigger>
                 <SelectContent>
@@ -147,7 +200,7 @@ const Recipes = () => {
             <div className="mb-6">
               <label className="block text-sm font-semibold mb-2">Độ khó</label>
               <Select value={selectedDifficulty} onValueChange={setSelectedDifficulty}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 rounded-lg">
                   <SelectValue placeholder="Chọn độ khó" />
                 </SelectTrigger>
                 <SelectContent>
@@ -161,9 +214,70 @@ const Recipes = () => {
               </Select>
             </div>
 
+            {/* Nguyên liệu */}
+            <div className="mb-6">
+              <label className="block text-sm font-semibold mb-2">Nguyên liệu</label>
+
+              <Select
+                value={ingredientSelectValue}
+                onValueChange={(val) => {
+                  const id = Number(val);
+                  if (!selectedIngredients.includes(id)) {
+                    setSelectedIngredients([...selectedIngredients, id]);
+                  }
+                  setIngredientSelectValue("");
+                }}
+              >
+                <SelectTrigger className="h-11 rounded-lg">
+                  <SelectValue placeholder="Chọn nguyên liệu" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ingredients.map((ing) => (
+                    <SelectItem
+                      key={ing.ingredient_id}
+                      value={ing.ingredient_id.toString()}
+                    >
+                      {ing.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Tag nguyên liệu */}
+              {selectedIngredients.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {selectedIngredients.map((id) => {
+                    const ing = ingredients.find((i) => i.ingredient_id === id);
+                    if (!ing) return null;
+
+                    return (
+                      <div
+                        key={id}
+                        className="flex items-center bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm"
+                      >
+                        {ing.name}
+                        <button
+                          className="ml-2"
+                          onClick={() =>
+                            setSelectedIngredients(
+                              selectedIngredients.filter((x) => x !== id)
+                            )
+                          }
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {/* Thời gian nấu */}
             <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2">Thời gian nấu tối đa</label>
+              <label className="block text-sm font-semibold mb-2">
+                Thời gian nấu tối đa
+              </label>
               <input
                 type="range"
                 min="0"
@@ -171,12 +285,16 @@ const Recipes = () => {
                 step="15"
                 value={maxCookingTime ?? 240}
                 onChange={(e) =>
-                  setMaxCookingTime(Number(e.target.value) === 240 ? null : Number(e.target.value))
+                  setMaxCookingTime(
+                    Number(e.target.value) === 240 ? null : Number(e.target.value)
+                  )
                 }
-                className="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 bg-gray-300 rounded-lg cursor-pointer accent-orange-500"
               />
               <div className="flex justify-between mt-1 text-sm text-gray-600">
-                <span>{maxCookingTime ? `Tối đa ${maxCookingTime} phút` : "Không giới hạn"}</span>
+                <span>
+                  {maxCookingTime ? `Tối đa ${maxCookingTime} phút` : "Không giới hạn"}
+                </span>
                 {maxCookingTime && (
                   <button
                     onClick={() => setMaxCookingTime(null)}
@@ -190,10 +308,12 @@ const Recipes = () => {
           </div>
         </div>
 
-        {/* --- Recipes Grid --- */}
+        {/* Danh sách công thức */}
         <div className="lg:col-span-3">
           <div className="flex justify-between items-center mb-6 lg:hidden">
-            <h2 className="text-lg font-bold text-gray-900">Kết quả ({filteredRecipes.length})</h2>
+            <h2 className="text-lg font-bold text-gray-900">
+              Kết quả ({filteredRecipes.length})
+            </h2>
             <Button
               variant="outline"
               onClick={() => setShowFilters(!showFilters)}
@@ -243,19 +363,29 @@ const Recipes = () => {
                         </div>
                       )}
                     </div>
+
                     <CardContent className="p-4">
                       <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1">
                         {recipe.title}
                       </h3>
-                      <p className="text-sm text-gray-600 line-clamp-2">{recipe.description}</p>
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {recipe.description}
+                      </p>
                     </CardContent>
+
                     <CardFooter className="flex justify-between items-center text-sm text-gray-500 border-t p-4">
                       <div className="flex items-center gap-1">
                         <Clock className="h-4 w-4" />
-                        <span>{(recipe.prep_time || 0) + (recipe.cooking_time || 0)} phút</span>
+                        <span>
+                          {(recipe.prep_time || 0) + (recipe.cooking_time || 0)} phút
+                        </span>
                       </div>
                       <div className="text-xs capitalize">
-                        {difficultyLevels.find(d => d.value === recipe.difficulty_level)?.label}
+                        {
+                          difficultyLevels.find(
+                            (d) => d.value === recipe.difficulty_level
+                          )?.label
+                        }
                       </div>
                     </CardFooter>
                   </Card>
@@ -265,7 +395,9 @@ const Recipes = () => {
           ) : (
             <div className="bg-white rounded-xl shadow-md p-12 text-center">
               <Search className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Không tìm thấy công thức</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                Không tìm thấy công thức
+              </h3>
               <p className="text-gray-600 mb-6">Thử thay đổi từ khóa hoặc bộ lọc</p>
               <Button onClick={clearFilters}>Xóa tất cả bộ lọc</Button>
             </div>

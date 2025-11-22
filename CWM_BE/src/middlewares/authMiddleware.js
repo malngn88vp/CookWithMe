@@ -1,29 +1,32 @@
 // src/middlewares/authMiddleware.js
 const jwt = require("jsonwebtoken");
+const { User } = require("../models"); // 🔑 cần import User model
+require("dotenv").config();
 
-module.exports = function (req, res, next) {
-  // 🔑 Lấy token từ header Authorization
+module.exports = async function (req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ message: "Không có token, từ chối truy cập." });
   }
 
-  // ✂️ Cắt bỏ 'Bearer ' để lấy token
   const token = authHeader.split(" ")[1];
 
   try {
-    // ✅ Xác thực token
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret_key");
 
-    // 👤 Gán thông tin người dùng vào req để sử dụng ở controller
-    req.user = decoded;
+    // 🔹 Lấy user từ DB để check trạng thái khóa
+    const user = await User.findByPk(decoded.user_id);
+    if (!user) return res.status(401).json({ message: "Người dùng không tồn tại" });
 
-    console.log("✅ Xác thực thành công:", req.user); // 👉 Debug khi cần
+    if (user.is_locked) {
+      return res.status(401).json({ message: "Tài khoản đã bị khóa" }); // 🔑 trả về lỗi để client logout
+    }
+
+    req.user = user; // gán user đầy đủ
     next();
   } catch (err) {
     console.error("❌ Lỗi xác thực JWT:", err.message);
 
-    // Gửi lỗi cụ thể hơn để dễ debug
     if (err.name === "TokenExpiredError") {
       return res.status(401).json({ message: "Token đã hết hạn. Vui lòng đăng nhập lại." });
     }

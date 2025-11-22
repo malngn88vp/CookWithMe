@@ -1,17 +1,14 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authAPI } from '@/services/api';
-import { toast } from 'sonner';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { authAPI } from "@/services/api";
+import { toast } from "sonner";
 
-// ==========================
-// 🧩 Interface định nghĩa user và context
-// ==========================
 interface User {
   user_id: number;
   name: string;
   email: string;
   role?: string;
-  user_avatar_url?: string;
-  token?: string; // để TypeScript không báo lỗi khi có token
+  avatar_url?: string;
+  is_locked?: boolean;
 }
 
 interface AuthContextType {
@@ -21,93 +18,94 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User | null>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
-  updateUser: (updatedUser: User) => void; // ✅ thêm hàm updateUser
+  updateUser: (updatedUser: User) => void;
 }
 
-// ==========================
-// 🧩 Tạo context
-// ==========================
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ==========================
-// 🧩 Provider chính
-// ==========================
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Load lại từ localStorage khi F5
   useEffect(() => {
-    const savedToken = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
-    if (savedToken && savedUser) {
+    const init = async () => {
+      const savedToken = localStorage.getItem("token");
+      const savedUser = localStorage.getItem("user");
+
+      if (!savedToken) {
+        setLoading(false);
+        return;
+      }
+
       setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-    }
-    setLoading(false);
+
+      try {
+        const res = await authAPI.getProfile();
+        const userData = res.data.user;
+
+        if (userData.is_locked) {
+          logout();
+          return;
+        }
+
+        setUser(userData);
+        localStorage.setItem("user", JSON.stringify(userData));
+      } catch (err) {
+        // ❗ Không logout nếu backend lỗi → fallback vào localStorage
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        }
+      }
+
+      setLoading(false);
+    };
+
+    init();
   }, []);
 
-  // ✅ Đăng nhập
   const login = async (email: string, password: string): Promise<User | null> => {
-    try {
-      const response = await authAPI.login({ email, password });
-      const { token, user: userData } = response.data;
+    const res = await authAPI.login({ email, password });
+    const { token, user: userData } = res.data;
 
-      const normalizedUser = {
-        ...userData,
-        role: userData.role?.toLowerCase?.() || '',
-      };
+    setToken(token);
+    setUser(userData);
 
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(normalizedUser));
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(userData));
 
-      setUser(normalizedUser);
-      setToken(token);
-
-      toast.success('Đăng nhập thành công!');
-      return normalizedUser;
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Đăng nhập thất bại');
-      throw error;
-    }
+    toast.success("Đăng nhập thành công!");
+    return userData;
   };
 
-  // ✅ Đăng ký
   const register = async (name: string, email: string, password: string) => {
-    try {
-      const response = await authAPI.register({ name, email, password });
-      const { token, user: userData } = response.data;
+    const res = await authAPI.register({ name, email, password });
+    const { token, user: userData } = res.data;
 
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
+    setToken(token);
+    setUser(userData);
 
-      setUser(userData);
-      setToken(token);
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(userData));
 
-      toast.success('Đăng ký thành công!');
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Đăng ký thất bại');
-      throw error;
-    }
+    toast.success("Đăng ký thành công!");
   };
 
-  // ✅ Đăng xuất
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+
     setUser(null);
     setToken(null);
-    toast.success('Đã đăng xuất');
+
+    toast.success("Đã đăng xuất");
   };
 
-  // ✅ Cập nhật thông tin user (dùng khi đổi avatar, đổi tên, v.v.)
   const updateUser = (updatedUser: User) => {
     setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    localStorage.setItem("user", JSON.stringify(updatedUser));
   };
 
-  // ✅ Xuất context
   return (
     <AuthContext.Provider value={{ user, token, loading, login, register, logout, updateUser }}>
       {children}
@@ -115,13 +113,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-// ==========================
-// 🧩 Hook tiện dụng
-// ==========================
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  return ctx;
 };

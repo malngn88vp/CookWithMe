@@ -1,3 +1,5 @@
+// —— CODE ĐÃ ĐƯỢC CHỈNH GIAO DIỆN —— //
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { recipeAPI } from "@/services/api";
@@ -28,47 +30,44 @@ const AdminRecipeDetail = () => {
   const [status, setStatus] = useState<"Pending" | "Approved" | "Rejected" | "">("");
   const [rejectReason, setRejectReason] = useState("");
 
-    useEffect(() => {
+  useEffect(() => {
     if (numericId) fetchRecipe();
-    }, [numericId]);
+  }, [numericId]);
 
-    const fetchRecipe = async () => {
+  const fetchRecipe = async () => {
     try {
-        const res = await recipeAPI.getById(numericId);
-        setRecipe(res.data.recipe);
-        setStatus(res.data.recipe.status);
+      const res = await recipeAPI.getById(numericId);
+      setRecipe(res.data.recipe);
+      setStatus(res.data.recipe.status);
     } catch (error) {
-        toast.error("Không thể tải công thức");
-        navigate("/admin/recipes");
+      toast.error("Không thể tải công thức");
+      navigate("/admin/recipes");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-    };
+  };
 
-    const handleStatusChange = async () => {
+  const handleStatusChange = async () => {
     if (!status || !["Approved", "Rejected", "Pending"].includes(status)) return;
 
     try {
-        await recipeAPI.updateStatus(numericId, {
-        status,
-        reason: rejectReason,
-        });
+      await recipeAPI.updateStatus(numericId, { status, reason: rejectReason });
 
-        toast.success(
+      toast.success(
         status === "Approved"
-            ? "✅ Đã duyệt công thức thành công!"
-            : status === "Rejected"
-            ? "❌ Đã từ chối công thức!"
-            : "🔄 Đã chuyển về trạng thái chờ duyệt."
-        );
+          ? "🎉 Công thức đã được duyệt!"
+          : status === "Rejected"
+          ? "❌ Công thức đã bị từ chối!"
+          : "🔄 Đã chuyển về trạng thái chờ duyệt."
+      );
 
-        navigate("/admin/recipes");
+      navigate("/admin/recipes");
     } catch (error) {
-        toast.error("Cập nhật trạng thái thất bại");
+      toast.error("Cập nhật trạng thái thất bại");
     }
-    };
+  };
 
-
+  // ————— Loading —————
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -101,13 +100,14 @@ const AdminRecipeDetail = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-6 py-10">
         <div className="mx-auto max-w-5xl">
+
           {/* Ảnh chính */}
-          <div className="relative mb-8 overflow-hidden rounded-2xl shadow">
+          <div className="relative mb-8 overflow-hidden rounded-2xl shadow-md">
             {recipeImage ? (
               <img
                 src={recipeImage}
                 alt={recipe.title}
-                className="h-96 w-full object-cover"
+                className="h-96 w-full object-cover transition-transform hover:scale-105 duration-500"
               />
             ) : (
               <div className="flex h-96 items-center justify-center bg-gray-100">
@@ -118,33 +118,35 @@ const AdminRecipeDetail = () => {
 
           {/* Header */}
           <div className="flex justify-between items-start mb-6">
-            <div>
-              <h1 className="text-4xl font-bold mb-2">{recipe.title}</h1>
-              <p className="text-lg text-gray-600 mb-3">{recipe.description}</p>
+            <div className="max-w-3xl">
+              <h1 className="text-4xl font-bold mb-3">{recipe.title}</h1>
+              <p className="text-gray-600 text-lg leading-relaxed mb-4">
+                {recipe.description}
+              </p>
 
-              <div className="flex flex-wrap gap-2 mb-3">
+              {/* Categories */}
+              <div className="flex flex-wrap gap-2 mb-4">
                 {recipe.categories?.map((cat: any) => (
-                  <Badge key={cat.category_id} variant="secondary">
+                  <Badge key={cat.category_id} variant="secondary" className="px-3 py-1">
                     {cat.name}
                   </Badge>
                 ))}
               </div>
 
-              <p className="text-sm text-gray-500">
-                👨‍🍳 <b>Tác giả:</b> {recipe.User?.name}
+              <p className="text-sm text-gray-600">
+                👤 <b>Tác giả:</b> {recipe.User?.name}
               </p>
-              <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
-                <Clock className="h-4 w-4" /> {recipe.cooking_time || 0} phút |{" "}
+
+              <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
+                <Clock className="h-4 w-4" /> {recipe.cooking_time ?? 0} phút —{" "}
                 {recipe.difficulty_level}
               </p>
             </div>
 
-            {/* Panel Duyệt */}
+            {/* Panel duyệt */}
             {user?.role === "admin" && (
-              <div className="bg-white border rounded-xl shadow-sm p-4 w-[280px]">
-                <h3 className="font-bold mb-3 text-gray-800">
-                  Duyệt công thức
-                </h3>
+              <div className="bg-white border rounded-xl shadow-md p-5 w-[280px]">
+                <h3 className="text-lg font-bold mb-3">Quản lý trạng thái</h3>
 
                 <Select
                   value={status}
@@ -152,7 +154,7 @@ const AdminRecipeDetail = () => {
                     setStatus(v as "Pending" | "Approved" | "Rejected")
                   }
                 >
-                  <SelectTrigger className={`w-full mb-3 ${statusColor}`}>
+                  <SelectTrigger className={`w-full mb-3 border ${statusColor}`}>
                     <SelectValue placeholder="Chọn trạng thái" />
                   </SelectTrigger>
                   <SelectContent>
@@ -164,18 +166,14 @@ const AdminRecipeDetail = () => {
 
                 {status === "Rejected" && (
                   <Textarea
-                    placeholder="Nhập lý do từ chối..."
+                    className="mb-3"
+                    placeholder="Nhập lý do từ chối…"
                     value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
-                    className="mb-3"
                   />
                 )}
 
-                <Button
-                  className="w-full"
-                  onClick={handleStatusChange}
-                  disabled={!status}
-                >
+                <Button className="w-full" onClick={handleStatusChange}>
                   {status === "Approved" ? (
                     <CheckCircle2 className="h-4 w-4 mr-2" />
                   ) : status === "Rejected" ? (
@@ -187,18 +185,19 @@ const AdminRecipeDetail = () => {
             )}
           </div>
 
-          <Separator className="my-8" />
+          <Separator className="my-10" />
 
           {/* Nguyên liệu */}
           <Card className="mb-8 shadow-sm">
             <CardContent className="p-6">
-              <h2 className="mb-4 text-2xl font-bold text-gray-800">Nguyên liệu</h2>
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">Nguyên liệu</h2>
+
               {recipe.ingredients?.length ? (
-                <ul className="list-disc pl-5 space-y-1">
+                <ul className="list-disc pl-5 space-y-2 text-gray-700">
                   {recipe.ingredients.map((ing: any) => (
                     <li key={ing.ingredient_id}>
                       {ing.name} —{" "}
-                      {parseFloat(ing.RecipeIngredient?.quantity || 0)
+                      {(ing.RecipeIngredient?.quantity || 0)
                         .toString()
                         .replace(/\.0+$/, "")}{" "}
                       {ing.RecipeIngredient?.unit ?? ing.default_unit}
@@ -211,30 +210,29 @@ const AdminRecipeDetail = () => {
             </CardContent>
           </Card>
 
-          {/* Cách làm */}
+          {/* Các bước thực hiện */}
           <Card className="shadow-sm">
             <CardContent className="p-6">
-              <h2 className="mb-4 text-2xl font-bold text-gray-800">Cách làm</h2>
-              {Array.isArray(recipe.steps) && recipe.steps.length > 0 ? (
+              <h2 className="text-2xl font-bold mb-6 text-gray-800">Cách làm</h2>
+
+              {recipe.steps?.length ? (
                 <div className="space-y-6">
                   {recipe.steps.map((step: any, index: number) => (
                     <div
                       key={index}
-                      className="rounded-xl border p-4 shadow-sm hover:shadow-md transition-all"
+                      className="rounded-xl border p-5 shadow-sm bg-white hover:shadow-md transition-all"
                     >
-                      <h3 className="font-semibold text-lg mb-2">
-                        Bước {index + 1}
-                      </h3>
-                      <p className="leading-relaxed whitespace-pre-line">
-                        {typeof step === "string"
-                          ? step
-                          : step.description || "Không có mô tả"}
+                      <h3 className="font-semibold text-lg mb-2">Bước {index + 1}</h3>
+
+                      <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+                        {step.description || "Không có mô tả"}
                       </p>
+
                       {step.image_url && (
                         <img
                           src={step.image_url}
                           alt={`Bước ${index + 1}`}
-                          className="mt-3 w-full max-w-md rounded-lg object-cover"
+                          className="mt-3 w-full max-w-md rounded-lg shadow-sm object-cover"
                         />
                       )}
                     </div>
@@ -245,6 +243,7 @@ const AdminRecipeDetail = () => {
               )}
             </CardContent>
           </Card>
+
         </div>
       </div>
     </div>

@@ -17,6 +17,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+
+      // 🆕 Thêm các cột dinh dưỡng
+      calories: { type: DataTypes.FLOAT, defaultValue: 0 }, 
+      protein: { type: DataTypes.FLOAT, defaultValue: 0 },
+      carbs: { type: DataTypes.FLOAT, defaultValue: 0 },
+      fat: { type: DataTypes.FLOAT, defaultValue: 0 },
     },
     {
       tableName: 'ingredient',

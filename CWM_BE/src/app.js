@@ -12,13 +12,13 @@ const commentRoutes = require("./routes/commentRoutes");
 const favoriteRoutes = require("./routes/favoriteRoutes");
 const mealPlanRoutes = require("./routes/mealPlanRoutes");
 const shoppingListRoutes = require("./routes/shoppingListRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 const app = express();
 
 app.use(
   cors({
-    origin: "http://localhost:8080",
-    credentials: true,
+    origin: "*",
   })
 );
 
@@ -33,6 +33,7 @@ app.use("/api/comments", commentRoutes);
 app.use("/api/favorites", favoriteRoutes);
 app.use("/api/meal-plans", mealPlanRoutes);
 app.use("/api/shopping-list", shoppingListRoutes);
+app.use("/api/users", userRoutes);
 
 app.get("/", (req, res) => {
   res.send("🍳 CookWithMe API is running...");

@@ -25,6 +25,8 @@ import EditRecipe from "@/pages/EditRecipe";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminRecipeDetail from "./pages/Admin/AdminRecipeDetail";
+import { AdminUser } from "./pages/Admin/AdminUser";
+import ChangePassword from "./pages/Auth/ChangePassword";
 
 const queryClient = new QueryClient();
 
@@ -42,7 +44,7 @@ const App = () => (
             <Route path="/auth/register" element={<Register />} />
             <Route path="/recipes" element={<Recipes />} />
             <Route path="/recipes/:id" element={<RecipeDetail />} />
-
+            <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
             {/* 🔒 User routes */}
             <Route
               path="/profile"
@@ -104,6 +106,7 @@ const App = () => (
               <Route path="ingredients" element={<AdminIngredients />} />
               <Route path="recipes" element={<AdminRecipes />} />
               <Route path="recipes/:id" element={<AdminRecipeDetail />} />
+              <Route path="users" element={<AdminUser />} />
             </Route>
 
             {/* ❌ Catch-all */}

@@ -1,35 +1,32 @@
-const { ShoppingListItem, Ingredient, MealPlan } = require('../models');
-const shoppingListService = require('../services/shoppingListService');
+"use strict";
 
-// 📌 Lấy danh sách mua sắm cho một meal plan
+const { ShoppingListItem } = require("../models");
+const shoppingListService = require("../services/shoppingListService");
+
+/* ==============================
+   GET SHOPPING LIST
+============================== */
+
 exports.getShoppingList = async (req, res) => {
   try {
     const { mealplan_id } = req.params;
 
-    const list = await ShoppingListItem.findAll({
-      where: { mealplan_id },
-      include: [
-        { model: Ingredient, attributes: ['ingredient_id', 'name'] },
-        { model: MealPlan, attributes: ['title'] }
-      ],
-      order: [['is_checked', 'ASC']]
-    });
+    const data = await shoppingListService.generateShoppingList(mealplan_id);
 
-    res.status(200).json(list);
-  } catch (error) {
-    console.error("❌ Lỗi khi lấy danh sách mua sắm:", error);
-    res.status(500).json({ message: 'Lỗi khi lấy danh sách mua sắm', error: error.message });
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error("❌ Lỗi khi lấy danh sách mua sắm:", err);
+    return res.status(500).json({ error: err.message });
   }
 };
 
-// 📌 Thêm mục vào danh sách mua sắm
+/* ==============================
+   ADD
+============================== */
+
 exports.addShoppingItem = async (req, res) => {
   try {
     const { mealplan_id, ingredient_id, quantity, unit } = req.body;
-
-    if (!mealplan_id || !ingredient_id) {
-      return res.status(400).json({ message: "Thiếu mealplan_id hoặc ingredient_id" });
-    }
 
     const newItem = await ShoppingListItem.create({
       mealplan_id,
@@ -39,66 +36,61 @@ exports.addShoppingItem = async (req, res) => {
     });
 
     res.status(201).json(newItem);
-  } catch (error) {
-    console.error("❌ Lỗi khi thêm nguyên liệu:", error);
-    res.status(500).json({ message: 'Lỗi khi thêm nguyên liệu vào danh sách mua sắm', error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };
 
-// 📌 Cập nhật trạng thái đã mua hay chưa
+/* ==============================
+   TOGGLE
+============================== */
+
 exports.toggleChecked = async (req, res) => {
   try {
-    const { item_id } = req.params;
-
-    const item = await ShoppingListItem.findByPk(item_id);
-    if (!item) return res.status(404).json({ message: 'Không tìm thấy mục mua sắm' });
+    const item = await ShoppingListItem.findByPk(req.params.item_id);
+    if (!item) return res.status(404).json({ message: "Không tìm thấy" });
 
     item.is_checked = !item.is_checked;
     await item.save();
 
-    res.status(200).json({
-      message: 'Đã cập nhật trạng thái mua sắm',
-      item
-    });
-  } catch (error) {
-    console.error("❌ Lỗi khi cập nhật trạng thái:", error);
-    res.status(500).json({ message: 'Lỗi khi cập nhật trạng thái mua sắm', error: error.message });
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };
 
-// 📌 Xóa một mục khỏi danh sách
+/* ==============================
+   DELETE
+============================== */
+
 exports.deleteShoppingItem = async (req, res) => {
   try {
-    const { item_id } = req.params;
-
-    const item = await ShoppingListItem.findByPk(item_id);
-    if (!item) return res.status(404).json({ message: 'Không tìm thấy mục mua sắm' });
+    const item = await ShoppingListItem.findByPk(req.params.item_id);
+    if (!item) return res.status(404).json({ message: "Không tìm thấy" });
 
     await item.destroy();
-    res.status(200).json({ message: '✅ Đã xóa mục mua sắm thành công' });
-  } catch (error) {
-    console.error("❌ Lỗi khi xóa mục mua sắm:", error);
-    res.status(500).json({ message: 'Lỗi khi xóa mục mua sắm', error: error.message });
+
+    res.json({ message: "Đã xoá" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };
 
-// 📌 Tự động tạo danh sách mua sắm từ MealPlan
+/* ==============================
+   GENERATE
+============================== */
+
 exports.generateShoppingListFromMealPlan = async (req, res) => {
   try {
-    const { mealplan_id } = req.params;
-    if (!mealplan_id) return res.status(400).json({ message: "Thiếu mealplan_id" });
+    const data = await shoppingListService.generateShoppingList(
+      req.params.mealplan_id
+    );
 
-    const shoppingList = await shoppingListService.generateShoppingList(mealplan_id);
-    res.status(201).json({
-      message: "✅ Danh sách mua sắm đã được tạo tự động từ MealPlan",
-      data: shoppingList,
+    res.json({
+      message: "Đã tạo danh sách mua sắm",
+      data,
     });
-  } catch (error) {
-    console.error("❌ Lỗi khi tạo danh sách tự động:", error);
-    res.status(500).json({
-      message: "Lỗi khi tạo danh sách mua sắm từ MealPlan",
-      error: error.message,
-    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };
-  

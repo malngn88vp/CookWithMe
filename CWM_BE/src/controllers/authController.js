@@ -13,6 +13,7 @@ const generateToken = (user) => {
       user_id: user.user_id,
       email: user.email,
       role: user.role.toLowerCase(),
+      is_locked: user.is_locked // ✅ thêm thông tin khóa vào token nếu cần
     },
     process.env.JWT_SECRET || 'secret_key', // 🔑 đặt trong .env
     { expiresIn: '7d' }
@@ -80,6 +81,11 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: 'Email hoặc mật khẩu không chính xác' });
     }
 
+    // 🔒 Kiểm tra tài khoản bị khóa
+    if (user.is_locked) {
+      return res.status(403).json({ message: 'Tài khoản của bạn đã bị khóa.' });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ message: 'Email hoặc mật khẩu không chính xác' });
@@ -94,6 +100,7 @@ exports.login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        is_locked: user.is_locked // ✅ gửi thông tin khóa
       },
       token,
     });
@@ -103,7 +110,7 @@ exports.login = async (req, res) => {
   }
 };
 
-// 📸 Cập nhật avatar người dùng (upload lên Cloudinary)
+
 exports.updateAvatar = async (req, res) => {
   try {
     const userId = req.user.user_id;
@@ -112,16 +119,13 @@ exports.updateAvatar = async (req, res) => {
       return res.status(400).json({ message: 'Vui lòng tải lên file avatar.' });
     }
 
-    // Upload ảnh lên Cloudinary
     const uploadResult = await cloudinary.uploader.upload(req.file.path, {
       folder: 'avatars',
       resource_type: 'image',
     });
 
-    // Xóa file tạm sau khi upload thành công
     fs.unlinkSync(req.file.path);
 
-    // Cập nhật URL mới vào DB
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
 
@@ -137,3 +141,95 @@ exports.updateAvatar = async (req, res) => {
     return res.status(500).json({ message: 'Lỗi server khi cập nhật avatar.' });
   }
 };
+
+exports.getProfile = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.user_id, {
+      attributes: { exclude: ['password_hash'] }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
+    }
+
+    return res.json({
+      message: 'Lấy hồ sơ thành công',
+      user
+    });
+  } catch (err) {
+    console.error('Lỗi getProfile:', err);
+    return res.status(500).json({ message: 'Lỗi server' });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { name } = req.body;
+
+    const user = await User.findByPk(userId);
+    if (!user) return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
+
+    user.name = name || user.name;
+
+    await user.save();
+
+    return res.status(200).json({
+      message: 'Cập nhật hồ sơ thành công',
+      user: {
+        user_id: user.user_id,
+        name: user.name,
+        avatar_url: user.avatar_url
+      }
+    });
+
+  } catch (err) {
+    console.error('Lỗi updateProfile:', err);
+    return res.status(500).json({ message: 'Lỗi server' });
+  }
+};
+
+exports.changePassword = async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { oldPassword, newPassword } = req.body;
+
+    // Kiểm tra dữ liệu
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "Vui lòng nhập đầy đủ thông tin." });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Không tìm thấy người dùng." });
+    }
+
+    // Kiểm tra mật khẩu cũ đúng hay không
+    const isMatch = await bcrypt.compare(oldPassword, user.password_hash);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Mật khẩu cũ không chính xác." });
+    }
+
+    // Không cho đặt mật khẩu mới trùng mật khẩu cũ
+    const isSame = await bcrypt.compare(newPassword, user.password_hash);
+    if (isSame) {
+      return res.status(400).json({ message: "Mật khẩu mới không được trùng mật khẩu cũ." });
+    }
+
+    // Mã hoá mật khẩu mới
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    user.password_hash = hashedPassword;
+    await user.save();
+
+    return res.json({
+      message: "Đổi mật khẩu thành công!",
+    });
+
+  } catch (err) {
+    console.error("Lỗi changePassword:", err);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+};
+

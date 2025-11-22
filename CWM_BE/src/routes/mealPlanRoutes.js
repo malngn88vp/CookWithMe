@@ -2,10 +2,13 @@
 const express = require("express");
 const router = express.Router();
 const mealPlanController = require("../controllers/mealPlanController");
+const suggestController = require("../controllers/suggestController");
 const authMiddleware = require("../middlewares/authMiddleware");
 
 // 📅 Tạo kế hoạch
 router.post("/", authMiddleware, mealPlanController.createMealPlan);
+
+router.post("/suggest", authMiddleware, suggestController.suggestMealPlan);
 
 // 🍲 Thêm công thức vào kế hoạch
 router.post("/:id/recipes", authMiddleware, mealPlanController.addRecipeToMealPlan);
@@ -17,7 +20,7 @@ router.get("/", authMiddleware, mealPlanController.getAllMealPlans);
 router.get("/:id", authMiddleware, mealPlanController.getMealPlanById);
 
 // ❌ Xóa công thức khỏi kế hoạch
-router.delete("/:id/recipes/:recipeId", authMiddleware, mealPlanController.removeRecipeFromMealPlan);
+router.delete("/:id/recipes", authMiddleware, mealPlanController.removeRecipeFull);
 
 // 🗑️ Xóa kế hoạch
 router.delete("/:id", authMiddleware, mealPlanController.deleteMealPlan);

@@ -53,6 +53,15 @@ module.exports = (db) => {
     as: 'recipes',
   });
 
+  RecipeIngredient.belongsTo(Ingredient, {
+    foreignKey: "ingredient_id",
+    as: "ingredient",
+  });
+
+  Ingredient.hasMany(RecipeIngredient, {
+    foreignKey: "ingredient_id",
+  });
+
   // 📌 Rating (1:N)
   User.hasMany(Rating, { foreignKey: 'user_id' });
   Rating.belongsTo(User, { foreignKey: 'user_id' });

@@ -1,19 +1,62 @@
 "use strict";
-const { Recipe, User, Category, RecipeCategory, Ingredient, RecipeIngredient, MealPlanRecipe, Sequelize } = require("../models");
+const {
+  Recipe,
+  User,
+  Category,
+  RecipeCategory,
+  Ingredient,
+  RecipeIngredient,
+  MealPlanRecipe,
+  Sequelize,
+} = require("../models");
 const cloudinary = require("../config/cloudinary");
 const fs = require("fs");
 
-// ✅ Tạo công thức mới (luôn ở trạng thái Pending)
+// ==================================================
+// 🔥 Function tính tổng dinh dưỡng
+// ==================================================
+async function calculateNutrition(ingredients) {
+  let total = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+
+  for (const ing of ingredients) {
+    const ingData = await Ingredient.findByPk(ing.ingredient_id);
+    if (!ingData) continue;
+
+    const qty = ing.quantity || 1;
+
+    total.calories += (ingData.calories || 0) * qty;
+    total.protein += (ingData.protein || 0) * qty;
+    total.carbs += (ingData.carbs || 0) * qty;
+    total.fat += (ingData.fat || 0) * qty;
+  }
+
+  return total;
+}
+
+// ==================================================
+// ✅ Tạo công thức mới
+// ==================================================
 exports.createRecipe = async (req, res) => {
   try {
-    const { title, description, user_id, difficulty_level, cooking_time } = req.body;
+    let {
+      title,
+      description,
+      user_id,
+      difficulty_level,
+      cooking_time,
+      servings,
+      meal_type,
+    } = req.body;
+
+    // ⭐ FIX QUAN TRỌNG: meal_type JSON → array
+    meal_type = typeof meal_type === "string" ? JSON.parse(meal_type) : meal_type;
 
     const steps = JSON.parse(req.body.steps || "[]");
     const category_ids = JSON.parse(req.body.category_ids || "[]");
     const ingredients = JSON.parse(req.body.ingredients || "[]");
 
+    // Upload images
     const imageFiles = req.files?.images || [];
-    const videoFiles = req.files?.video || [];
     const stepImages = req.files?.stepImages || [];
 
     const recipeImageUrls = [];
@@ -23,46 +66,74 @@ exports.createRecipe = async (req, res) => {
       fs.unlinkSync(file.path);
     }
 
+    // Upload step images
     const updatedSteps = await Promise.all(
       steps.map(async (step, index) => {
-        const imageFile = stepImages[index];
+        const file = stepImages[index];
         let imageUrl = step.image_url;
-        if (imageFile) {
-          const uploadResult = await cloudinary.uploader.upload(imageFile.path, { folder: "recipes/steps" });
-          imageUrl = uploadResult.secure_url;
-          fs.unlinkSync(imageFile.path);
+
+        if (file) {
+          const upload = await cloudinary.uploader.upload(file.path, {
+            folder: "recipes/steps",
+          });
+          imageUrl = upload.secure_url;
+          fs.unlinkSync(file.path);
         }
-        return { description: step.description, image_url: imageUrl, order: index + 1 };
+
+        return {
+          description: step.description,
+          image_url: imageUrl,
+          order: index + 1,
+        };
       })
     );
 
+    // 🔥 Tính dinh dưỡng tổng
+    const nutrition = await calculateNutrition(ingredients);
+
+    // Tạo recipe
     const recipe = await Recipe.create({
       user_id,
       title,
       description,
       difficulty_level,
       cooking_time,
+      servings,
+
+      // ⭐ LƯU meal_type đúng dạng array
+      meal_type: meal_type || ["Breakfast", "Lunch", "Dinner"],
+
       steps: updatedSteps,
       images: recipeImageUrls,
       status: "Pending",
+
+      // 🔥 Lưu nutrition vào DB
+      cached_calories: nutrition.calories,
+      cached_protein: nutrition.protein,
+      cached_carbs: nutrition.carbs,
+      cached_fat: nutrition.fat,
     });
 
-    if (Array.isArray(category_ids) && category_ids.length > 0) {
-      const categoryLinks = category_ids.map((cid) => ({
-        recipe_id: recipe.recipe_id,
-        category_id: cid,
-      }));
-      await RecipeCategory.bulkCreate(categoryLinks);
+    // Insert categories
+    if (category_ids.length > 0) {
+      await RecipeCategory.bulkCreate(
+        category_ids.map((cid) => ({
+          recipe_id: recipe.recipe_id,
+          category_id: cid,
+        }))
+      );
     }
 
-    if (Array.isArray(ingredients) && ingredients.length > 0) {
-      const ingredientLinks = ingredients.map((ing) => ({
-        recipe_id: recipe.recipe_id,
-        ingredient_id: ing.ingredient_id,
-        quantity: ing.quantity,
-        unit: ing.unit,
-      }));
-      await RecipeIngredient.bulkCreate(ingredientLinks);
+    // Insert ingredients
+    if (ingredients.length > 0) {
+      await RecipeIngredient.bulkCreate(
+        ingredients.map((ing) => ({
+          recipe_id: recipe.recipe_id,
+          ingredient_id: ing.ingredient_id,
+          quantity: ing.quantity,
+          unit: ing.unit,
+        }))
+      );
     }
 
     return res.status(201).json({
@@ -71,20 +142,13 @@ exports.createRecipe = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Lỗi createRecipe:", error);
-    if (req.files) {
-      Object.values(req.files)
-        .flat()
-        .forEach((file) => {
-          try {
-            fs.unlinkSync(file.path);
-          } catch (e) {}
-        });
-    }
     res.status(500).json({ message: "Lỗi tạo công thức", error: error.message });
   }
 };
 
-// ✅ Lấy tất cả công thức (lọc theo status)
+// ==================================================
+// ✅ Lấy tất cả công thức
+// ==================================================
 exports.getAllRecipes = async (req, res) => {
   try {
     const { user_id, status } = req.query;
@@ -108,9 +172,9 @@ exports.getAllRecipes = async (req, res) => {
           [
             Sequelize.literal(`(
               COALESCE(
-                (SELECT AVG("stars") 
-                 FROM "rating" 
-                 WHERE "rating"."recipe_id" = "Recipe"."recipe_id"), 
+                (SELECT AVG("stars")
+                  FROM "rating"
+                  WHERE "rating"."recipe_id" = "Recipe"."recipe_id"),
                 0
               )
             )`),
@@ -143,8 +207,9 @@ exports.getAllRecipes = async (req, res) => {
   }
 };
 
-
-// ✅ Lấy chi tiết công thức (chỉ xem được Approved, trừ admin hoặc chính chủ)
+// ==================================================
+// ✅ Lấy chi tiết công thức
+// ==================================================
 exports.getRecipeById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -155,9 +220,9 @@ exports.getRecipeById = async (req, res) => {
           [
             Sequelize.literal(`(
               COALESCE(
-                (SELECT AVG("stars") 
-                 FROM "rating" 
-                 WHERE "rating"."recipe_id" = "Recipe"."recipe_id"), 
+                (SELECT AVG("stars")
+                 FROM "rating"
+                 WHERE "rating"."recipe_id" = "Recipe"."recipe_id"),
                 0
               )
             )`),
@@ -165,9 +230,9 @@ exports.getRecipeById = async (req, res) => {
           ],
           [
             Sequelize.literal(`(
-              (SELECT COUNT("rating_id") 
-               FROM "rating" 
-               WHERE "rating"."recipe_id" = "Recipe"."recipe_id")
+              SELECT COUNT("rating_id")
+              FROM "rating"
+              WHERE "rating"."recipe_id" = "Recipe"."recipe_id"
             )`),
             "rating_count",
           ],
@@ -187,9 +252,12 @@ exports.getRecipeById = async (req, res) => {
 
     if (!recipe) return res.status(404).json({ message: "Không tìm thấy công thức." });
 
-    const user = req.user;
-    if (recipe.status !== "Approved" && user?.role !== "admin" && user?.user_id !== recipe.user_id) {
-      return res.status(403).json({ message: "Công thức chưa được duyệt hoặc đã bị từ chối." });
+    if (
+      recipe.status !== "Approved" &&
+      req.user?.role !== "admin" &&
+      req.user?.user_id !== recipe.user_id
+    ) {
+      return res.status(403).json({ message: "Công thức chưa được duyệt." });
     }
 
     return res.status(200).json({ recipe });
@@ -199,95 +267,9 @@ exports.getRecipeById = async (req, res) => {
   }
 };
 
-
-// ✅ Cập nhật công thức (chủ sở hữu hoặc admin)
-exports.updateRecipe = async (req, res) => {
-  try {
-    const { id } = req.params;
-    let { title, description, steps, ingredients, difficulty_level, cooking_time, category_ids } = req.body;
-
-    const recipe = await Recipe.findByPk(id);
-    if (!recipe) return res.status(404).json({ message: "Không tìm thấy công thức." });
-
-    if (req.user.role !== "admin" && req.user.user_id !== recipe.user_id) {
-      return res.status(403).json({ message: "Không có quyền chỉnh sửa công thức này" });
-    }
-
-    // Parse JSON
-    if (typeof steps === "string") steps = JSON.parse(steps);
-    if (typeof ingredients === "string") ingredients = JSON.parse(ingredients);
-    if (typeof category_ids === "string") category_ids = JSON.parse(category_ids);
-
-    // Upload ảnh chính
-    if (req.files?.images?.length > 0) {
-      recipe.images = [];
-      for (const file of req.files.images) {
-        const uploadedImage = await cloudinary.uploader.upload(file.path, { folder: "recipes/images" });
-        recipe.images.push(uploadedImage.secure_url);
-        fs.unlinkSync(file.path);
-      }
-    }
-
-    // Upload video nếu có
-    if (req.files?.video?.[0]) {
-      const videoPath = req.files.video[0].path;
-      const uploadVideo = await cloudinary.uploader.upload(videoPath, {
-        folder: "recipes/videos",
-        resource_type: "video",
-      });
-      recipe.video_url = uploadVideo.secure_url;
-      fs.unlinkSync(videoPath);
-    }
-
-    // Cập nhật cơ bản
-    recipe.title = title || recipe.title;
-    recipe.description = description || recipe.description;
-    recipe.difficulty_level = difficulty_level || recipe.difficulty_level;
-    recipe.cooking_time = cooking_time || recipe.cooking_time;
-
-    // Nếu user thường chỉnh sửa → reset status về Pending
-    if (req.user.role !== "admin") {
-      recipe.status = "Pending";
-    }
-
-    // Cập nhật danh mục
-    if (Array.isArray(category_ids)) {
-      await RecipeCategory.destroy({ where: { recipe_id: id } });
-      await RecipeCategory.bulkCreate(category_ids.map((catId) => ({ recipe_id: id, category_id: catId })));
-    }
-
-    // Cập nhật nguyên liệu
-    if (Array.isArray(ingredients)) {
-      await RecipeIngredient.destroy({ where: { recipe_id: id } });
-      await RecipeIngredient.bulkCreate(
-        ingredients.map((ing) => ({
-          recipe_id: id,
-          ingredient_id: ing.ingredient_id,
-          quantity: ing.quantity,
-          unit: ing.unit,
-        }))
-      );
-    }
-
-    // Cập nhật steps
-    if (Array.isArray(steps)) {
-      recipe.steps = steps.map((s, index) => ({
-        order: s.order || index + 1,
-        description: s.description,
-        image_url: s.image_url || null,
-      }));
-    }
-
-    await recipe.save();
-
-    return res.status(200).json({ message: "Cập nhật công thức thành công!", recipe });
-  } catch (error) {
-    console.error("❌ Lỗi updateRecipe:", error);
-    return res.status(500).json({ message: "Lỗi server", error: error.message });
-  }
-};
-
-// ✅ Admin duyệt hoặc từ chối công thức
+// ==================================================
+// ✅ Admin duyệt / từ chối
+// ==================================================
 exports.updateRecipeStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -303,14 +285,173 @@ exports.updateRecipeStatus = async (req, res) => {
     recipe.status = status;
     await recipe.save();
 
-    return res.status(200).json({ message: `Cập nhật trạng thái công thức thành công: ${status}` });
+    return res.status(200).json({
+      message: `Cập nhật trạng thái thành công: ${status}`,
+    });
   } catch (error) {
     console.error("❌ Lỗi updateRecipeStatus:", error);
     return res.status(500).json({ message: "Lỗi server", error: error.message });
   }
 };
 
-// ✅ Xóa công thức
+// ==================================================
+// ✅ Cập nhật công thức
+// ==================================================
+exports.updateRecipe = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let {
+      title,
+      description,
+      steps,
+      ingredients,
+      difficulty_level,
+      cooking_time,
+      servings,
+      meal_type,
+      category_ids,
+    } = req.body;
+
+    const recipe = await Recipe.findByPk(id);
+    if (!recipe) return res.status(404).json({ message: "Không tìm thấy công thức." });
+
+    if (req.user.role !== "admin" && req.user.user_id !== recipe.user_id) {
+      return res.status(403).json({ message: "Không có quyền chỉnh sửa công thức này" });
+    }
+
+    // Parse JSON
+    if (typeof steps === "string") steps = JSON.parse(steps);
+    if (typeof ingredients === "string") ingredients = JSON.parse(ingredients);
+    if (typeof category_ids === "string") category_ids = JSON.parse(category_ids);
+
+    // ⭐ FIX meal_type JSON
+    if (typeof meal_type === "string") meal_type = JSON.parse(meal_type);
+
+    // Upload ảnh chính
+    if (req.files?.images?.length > 0) {
+      recipe.images = [];
+      for (const file of req.files.images) {
+        const uploadedImage = await cloudinary.uploader.upload(
+          file.path,
+          { folder: "recipes/images" }
+        );
+        recipe.images.push(uploadedImage.secure_url);
+        fs.unlinkSync(file.path);
+      }
+    }
+
+    // Upload video
+    if (req.files?.video?.[0]) {
+      const uploadVideo = await cloudinary.uploader.upload(
+        req.files.video[0].path,
+        {
+          folder: "recipes/videos",
+          resource_type: "video",
+        }
+      );
+      recipe.video_url = uploadVideo.secure_url;
+      fs.unlinkSync(req.files.video[0].path);
+    }
+
+    // Update fields
+    recipe.title = title || recipe.title;
+    recipe.description = description || recipe.description;
+    recipe.difficulty_level = difficulty_level || recipe.difficulty_level;
+    recipe.cooking_time = cooking_time || recipe.cooking_time;
+    recipe.servings = servings || recipe.servings;
+
+    // ⭐ Lưu meal_type dạng array
+    recipe.meal_type = meal_type || recipe.meal_type;
+
+    if (req.user.role !== "admin") recipe.status = "Pending";
+
+    // Update categories
+    if (Array.isArray(category_ids)) {
+      await RecipeCategory.destroy({ where: { recipe_id: id } });
+      await RecipeCategory.bulkCreate(
+        category_ids.map((catId) => ({
+          recipe_id: id,
+          category_id: catId,
+        }))
+      );
+    }
+
+    // Update ingredients + tính lại dinh dưỡng
+    if (Array.isArray(ingredients)) {
+      await RecipeIngredient.destroy({ where: { recipe_id: id } });
+      await RecipeIngredient.bulkCreate(
+        ingredients.map((ing) => ({
+          recipe_id: id,
+          ingredient_id: ing.ingredient_id,
+          quantity: ing.quantity,
+          unit: ing.unit,
+        }))
+      );
+
+      // 🔥 Tính lại nutrition
+      const nutrition = await calculateNutrition(ingredients);
+      recipe.cached_calories = nutrition.calories;
+      recipe.cached_protein = nutrition.protein;
+      recipe.cached_carbs = nutrition.carbs;
+      recipe.cached_fat = nutrition.fat;
+    }
+
+    // Update steps & images
+    if (Array.isArray(steps)) {
+      const stepImages = req.files?.stepImages || [];
+      let stepImageIndexes = req.body.stepImageIndex || [];
+
+      if (typeof stepImageIndexes === "string")
+        stepImageIndexes = [stepImageIndexes];
+
+      const finalSteps = [];
+
+      for (let i = 0; i < steps.length; i++) {
+        const s = steps[i];
+
+        let image_url =
+          typeof s.image_url !== "undefined"
+            ? s.image_url
+            : recipe.steps?.[i]?.image_url;
+
+        const replaceIndex = stepImageIndexes.findIndex(
+          (idx) => Number(idx) === i
+        );
+
+        if (replaceIndex !== -1 && stepImages[replaceIndex]) {
+          const upload = await cloudinary.uploader.upload(
+            stepImages[replaceIndex].path,
+            { folder: "recipes/steps" }
+          );
+          image_url = upload.secure_url;
+          fs.unlinkSync(stepImages[replaceIndex].path);
+        }
+
+        finalSteps.push({
+          order: s.order || i + 1,
+          description: s.description,
+          image_url,
+        });
+      }
+
+      recipe.steps = finalSteps;
+    }
+
+    await recipe.save();
+
+    return res.status(200).json({
+      message: "Cập nhật công thức thành công!",
+      recipe,
+    });
+  } catch (error) {
+    console.error("❌ Lỗi updateRecipe:", error);
+    return res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+// ==================================================
+// ❌ Xóa công thức
+// ==================================================
 exports.deleteRecipe = async (req, res) => {
   try {
     const { id } = req.params;
@@ -319,12 +460,13 @@ exports.deleteRecipe = async (req, res) => {
     if (!recipe) return res.status(404).json({ message: "Không tìm thấy công thức." });
 
     if (req.user.role !== "admin" && req.user.user_id !== recipe.user_id) {
-      return res.status(403).json({ message: "Không có quyền xoá công thức này" });
+      return res.status(403).json({ message: "Không có quyền xoá" });
     }
 
     await MealPlanRecipe.destroy({ where: { recipe_id: id } });
     await RecipeCategory.destroy({ where: { recipe_id: id } });
     await RecipeIngredient.destroy({ where: { recipe_id: id } });
+
     await recipe.destroy();
 
     return res.status(200).json({ message: "Xóa công thức thành công!" });

@@ -1,176 +1,194 @@
+// controllers/mealPlanController.js
 const { MealPlan, MealPlanRecipe, Recipe } = require("../models");
 
-module.exports = {
-  // 📅 Tạo kế hoạch bữa ăn
-  createMealPlan: async (req, res) => {
-    try {
-      const userId = req.user.user_id;
-      const { title, start_date, end_date } = req.body;
+/* ============================================================
+   📅 TẠO KẾ HOẠCH BỮA ĂN
+============================================================ */
+exports.createMealPlan = async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { title, start_date, end_date } = req.body;
 
-      if (!title || !start_date || !end_date) {
-        return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
-      }
-
-      const mealPlan = await MealPlan.create({
-        user_id: userId,
-        title,
-        start_date,
-        end_date,
-      });
-
-      console.log("✅ MealPlan tạo thành công:", mealPlan.mealplan_id);
-
-      res.status(201).json({
-        message: "Tạo kế hoạch bữa ăn thành công",
-        mealPlan,
-      });
-    } catch (error) {
-      console.error("❌ Lỗi createMealPlan:", error);
-      res.status(500).json({ message: "Lỗi server", error: error.message });
+    if (!title || !start_date || !end_date) {
+      return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
     }
-  },
 
-  // 🍲 Thêm công thức vào kế hoạch
-    addRecipeToMealPlan: async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { recipe_id, meal_type, scheduled_date } = req.body;
-      const userId = req.user.user_id;
+    const mealPlan = await MealPlan.create({
+      user_id: userId,
+      title,
+      start_date,
+      end_date,
+    });
 
-      if (!recipe_id || !meal_type || !scheduled_date) {
-        return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+    return res.status(201).json({
+      message: "Tạo kế hoạch bữa ăn thành công",
+      mealPlan,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+/* ============================================================
+   🍲 THÊM CÔNG THỨC VÀO KẾ HOẠCH
+============================================================ */
+exports.addRecipeToMealPlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { recipe_id, meal_type, scheduled_date } = req.body;
+    const userId = req.user.user_id;
+
+    if (!recipe_id || !meal_type || !scheduled_date) {
+      return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+    }
+
+    const mealPlan = await MealPlan.findOne({
+      where: { mealplan_id: id, user_id: userId },
+    });
+    if (!mealPlan) {
+      return res.status(404).json({ message: "Không tìm thấy kế hoạch của bạn" });
+    }
+
+    const recipe = await Recipe.findByPk(recipe_id);
+    if (!recipe) {
+      return res.status(404).json({ message: "Công thức không tồn tại" });
+    }
+
+    const dateOnly = new Date(scheduled_date).toISOString().split("T")[0];
+
+    const exists = await MealPlanRecipe.findOne({
+      where: { mealplan_id: id, recipe_id, scheduled_date: dateOnly, meal_type },
+    });
+
+    if (exists) {
+      return res.status(400).json({ message: "Công thức đã có trong kế hoạch này" });
+    }
+
+    const newMeal = await MealPlanRecipe.create({
+      mealplan_id: id,
+      recipe_id,
+      meal_type,
+      scheduled_date: dateOnly,
+    });
+
+    return res.status(201).json({
+      message: "Đã thêm công thức vào kế hoạch",
+      data: newMeal,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+/* ============================================================
+   📜 LẤY TOÀN BỘ KẾ HOẠCH
+============================================================ */
+exports.getAllMealPlans = async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const mealPlans = await MealPlan.findAll({
+      where: { user_id: userId },
+      order: [["created_at", "DESC"]],
+    });
+
+    res.status(200).json(mealPlans);
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+/* ============================================================
+   📊 LẤY CHI TIẾT 1 KẾ HOẠCH
+============================================================ */
+exports.getMealPlanById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const mealPlan = await MealPlan.findByPk(id, { raw: true });
+
+    if (!mealPlan) {
+      return res.status(404).json({ message: "Không tìm thấy kế hoạch" });
+    }
+
+    const items = await MealPlanRecipe.findAll({
+      where: { mealplan_id: id },
+      raw: true,
+    });
+
+    const recipes = [];
+
+    for (const item of items) {
+      const recipe = await Recipe.findByPk(item.recipe_id, { raw: true });
+      if (recipe) {
+        recipes.push({
+          ...recipe,
+          MealPlanRecipe: {
+            meal_type: item.meal_type,
+            scheduled_date: item.scheduled_date,
+            recipe_id: item.recipe_id,
+            mealplan_id: id,
+          },
+        });
       }
+    }
 
-      const mealPlan = await MealPlan.findOne({
-        where: { mealplan_id: id, user_id: userId },
-      });
-      if (!mealPlan) {
-        return res.status(404).json({ message: "Không tìm thấy kế hoạch của bạn" });
-      }
+    return res.status(200).json({
+      ...mealPlan,
+      recipes,
+    });
+  } catch (error) {
+    console.error("getMealPlanById ERR:", error);
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
 
-      const recipe = await Recipe.findByPk(recipe_id);
-      if (!recipe) {
-        return res.status(404).json({ message: "Công thức không tồn tại" });
-      }
+/* ============================================================
+   ❌ XOÁ 1 MÓN KHỎI KẾ HOẠCH
+============================================================ */
+exports.removeRecipeFull = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { recipe_id, meal_type, scheduled_date } = req.body;
 
-      // 🔹 Chuẩn hóa ngày
-      const dateObj = new Date(scheduled_date);
-      const year = dateObj.getFullYear();
-      const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-      const day = String(dateObj.getDate()).padStart(2, "0");
-      const dateOnly = `${year}-${month}-${day}`;
+    if (!recipe_id || !meal_type || !scheduled_date) {
+      return res.status(400).json({ message: "Thiếu thông tin xoá" });
+    }
 
-      // 🔹 Check món đã tồn tại với date chuẩn
-      const mealExists = await MealPlanRecipe.findOne({
-        where: { mealplan_id: id, recipe_id, scheduled_date: dateOnly, meal_type },
-      });
-      if (mealExists) {
-        return res.status(400).json({ message: "Công thức đã có trong kế hoạch này" });
-      }
-
-      // 🔹 Tạo món mới
-      const newMeal = await MealPlanRecipe.create({
+    const deleted = await MealPlanRecipe.destroy({
+      where: {
         mealplan_id: id,
         recipe_id,
         meal_type,
-        scheduled_date: dateOnly,
-      });
+        scheduled_date,
+      },
+    });
 
-      console.log("✅ Đã thêm món vào kế hoạch:", newMeal.toJSON());
-
-      return res.status(201).json({
-        message: "Đã thêm công thức vào kế hoạch",
-        data: newMeal,
-      });
-    } catch (error) {
-      console.error("❌ Lỗi addRecipeToMealPlan:", error);
-      res.status(500).json({ message: "Lỗi server", error: error.message });
+    if (!deleted) {
+      return res.status(404).json({ message: "Món không tồn tại trong kế hoạch" });
     }
-  },
 
-  // 📜 Lấy tất cả kế hoạch của user (✅ ĐÃ SỬA — include Recipe)
-  getAllMealPlans: async (req, res) => {
-    try {
-      const userId = req.user.user_id;
-      const mealPlans = await MealPlan.findAll({
-        where: { user_id: userId },
-        order: [["created_at", "DESC"]],
-        include: [
-          {
-            model: Recipe,
-            as: "recipes",
-            through: { attributes: ["meal_type", "scheduled_date"] },
-          },
-        ],
-      });
+    res.status(200).json({ message: "Đã xoá món thành công" });
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
 
-      res.status(200).json(mealPlans);
-    } catch (error) {
-      console.error("❌ Lỗi getAllMealPlans:", error);
-      res.status(500).json({ message: "Lỗi server", error: error.message });
+/* ============================================================
+   🗑 XOÁ TOÀN BỘ KẾ HOẠCH
+============================================================ */
+exports.deleteMealPlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await MealPlanRecipe.destroy({ where: { mealplan_id: id } });
+    const deleted = await MealPlan.destroy({ where: { mealplan_id: id } });
+
+    if (!deleted) {
+      return res.status(404).json({ message: "Không tìm thấy kế hoạch" });
     }
-  },
 
-  // 📊 Lấy chi tiết kế hoạch (kèm công thức)
-  getMealPlanById: async (req, res) => {
-    try {
-      const { id } = req.params;
-      const mealPlan = await MealPlan.findByPk(id, {
-        include: [
-          {
-            model: Recipe,
-            as: "recipes",
-            through: { attributes: ["meal_type", "scheduled_date"] },
-          },
-        ],
-      });
-
-      if (!mealPlan) {
-        return res.status(404).json({ message: "Không tìm thấy kế hoạch" });
-      }
-
-      res.status(200).json(mealPlan);
-    } catch (error) {
-      console.error("❌ Lỗi getMealPlanById:", error);
-      res.status(500).json({ message: "Lỗi server", error: error.message });
-    }
-  },
-
-  // ❌ Xóa công thức khỏi kế hoạch
-  removeRecipeFromMealPlan: async (req, res) => {
-    try {
-      const { id, recipeId } = req.params;
-      const deleted = await MealPlanRecipe.destroy({
-        where: { mealplan_id: id, recipe_id: recipeId },
-      });
-
-      if (!deleted) {
-        return res.status(404).json({ message: "Công thức không tồn tại trong kế hoạch" });
-      }
-
-      res.status(200).json({ message: "Đã xóa công thức khỏi kế hoạch" });
-    } catch (error) {
-      console.error("❌ Lỗi removeRecipeFromMealPlan:", error);
-      res.status(500).json({ message: "Lỗi server", error: error.message });
-    }
-  },
-
-  // 🗑️ Xóa kế hoạch
-  deleteMealPlan: async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      await MealPlanRecipe.destroy({ where: { mealplan_id: id } });
-      const deleted = await MealPlan.destroy({ where: { mealplan_id: id } });
-
-      if (!deleted) {
-        return res.status(404).json({ message: "Không tìm thấy kế hoạch" });
-      }
-
-      res.status(200).json({ message: "Đã xóa kế hoạch bữa ăn" });
-    } catch (error) {
-      console.error("❌ Lỗi deleteMealPlan:", error);
-      res.status(500).json({ message: "Lỗi server", error: error.message });
-    }
-  },
+    res.status(200).json({ message: "Đã xóa kế hoạch bữa ăn" });
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
 };

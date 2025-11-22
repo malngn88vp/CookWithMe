@@ -14,7 +14,9 @@ module.exports = (sequelize, DataTypes) => {
       },
       avatar_url: { type: DataTypes.STRING(512) },
       created_at: { type: DataTypes.DATE, defaultValue: sequelize.literal('CURRENT_TIMESTAMP') },
-      updated_at: { type: DataTypes.DATE, defaultValue: sequelize.literal('CURRENT_TIMESTAMP') }
+      updated_at: { type: DataTypes.DATE, defaultValue: sequelize.literal('CURRENT_TIMESTAMP') },
+      warning_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+      is_locked: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
     {
       tableName: 'user',

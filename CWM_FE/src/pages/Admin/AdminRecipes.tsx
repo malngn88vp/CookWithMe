@@ -35,19 +35,20 @@ export const AdminRecipes = () => {
     loadRecipes();
   }, [statusFilter]);
 
-  // 🔹 Load danh sách công thức (lọc theo status)
+  // Load danh sách công thức
   const loadRecipes = async () => {
     setLoading(true);
     try {
       const res = await recipeAPI.getAll({
         status: statusFilter === "all" ? undefined : statusFilter,
       });
+
       const data = res.data?.recipes ?? [];
 
       const mapped: RecipeItem[] = data.map((r: any) => ({
         id: r.recipe_id,
         name: r.title,
-        author: r.User?.name || "Unknown",
+        author: r.User?.name || "Không rõ",
         image: r.images?.[0] || "",
         cookTime: r.cooking_time ?? 0,
         difficulty: r.difficulty_level ?? "Dễ",
@@ -65,7 +66,7 @@ export const AdminRecipes = () => {
     }
   };
 
-  // 🔹 Lọc theo từ khóa tìm kiếm
+  // Lọc theo từ khóa tìm kiếm
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
     return recipes.filter((r) => {
@@ -75,11 +76,15 @@ export const AdminRecipes = () => {
     });
   }, [recipes, search]);
 
-  // 🔹 Cập nhật trạng thái công thức
-  const handleStatusChange = async (id: number, newStatus: "Pending" | "Approved" | "Rejected") => {
+  // Cập nhật trạng thái công thức
+  const handleStatusChange = async (
+    id: number,
+    newStatus: "Pending" | "Approved" | "Rejected"
+  ) => {
     try {
       await recipeAPI.updateStatus(id, { status: newStatus });
-      toast.success(`✅ Cập nhật trạng thái thành ${newStatus}`);
+      toast.success(`Cập nhật trạng thái thành "${newStatus}"`);
+
       setRecipes((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
       );
@@ -89,7 +94,7 @@ export const AdminRecipes = () => {
     }
   };
 
-  // 🔹 Hàm render badge trạng thái
+  // Badge trạng thái
   const renderStatusBadge = (status: string) => {
     const color =
       status === "Approved"
@@ -97,28 +102,37 @@ export const AdminRecipes = () => {
         : status === "Rejected"
         ? "bg-red-100 text-red-700"
         : "bg-yellow-100 text-yellow-700";
+
     const label =
       status === "Approved"
         ? "Đã duyệt"
         : status === "Rejected"
-        ? "Từ chối"
+        ? "Bị từ chối"
         : "Chờ duyệt";
 
-    return <Badge className={`${color} font-medium`}>{label}</Badge>;
+    return (
+      <Badge className={`${color} font-medium rounded-md px-2 py-1`}>
+        {label}
+      </Badge>
+    );
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
-          <h1 className="text-3xl font-bold">Quản lý công thức</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Quản lý công thức
+          </h1>
 
           <div className="flex gap-3">
+
             {/* Bộ lọc trạng thái */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Tất cả trạng thái" />
+              <SelectTrigger className="w-[180px] bg-white border shadow-sm">
+                <SelectValue placeholder="Lọc theo trạng thái" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tất cả</SelectItem>
@@ -128,27 +142,27 @@ export const AdminRecipes = () => {
               </SelectContent>
             </Select>
 
-            {/* Ô tìm kiếm */}
+            {/* Tìm kiếm */}
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm công thức..."
-                className="pl-9 w-[220px]"
+                placeholder="Tìm công thức…"
+                className="pl-9 w-[220px] border shadow-sm"
               />
             </div>
           </div>
         </div>
 
-        {/* Error */}
+        {/* Lỗi */}
         {error && (
-          <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 mb-4 rounded">
+          <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 mb-6 rounded">
             {error}
           </div>
         )}
 
-        {/* List */}
+        {/* Danh sách */}
         {loading ? (
           <p className="text-center text-gray-500">Đang tải...</p>
         ) : filtered.length === 0 ? (
@@ -160,15 +174,16 @@ export const AdminRecipes = () => {
             {filtered.map((r) => (
               <Card
                 key={r.id}
-                className="relative group hover:shadow-lg transition cursor-pointer"
+                className="relative group bg-white border shadow-sm hover:shadow-lg transition rounded-xl overflow-hidden cursor-pointer"
               >
                 <Link to={`/admin/recipes/${r.id}`}>
+                  {/* Ảnh */}
                   <div className="h-48 bg-gray-100 overflow-hidden">
                     {r.image ? (
                       <img
                         src={r.image}
                         alt={r.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
                       <div className="flex items-center justify-center h-full">
@@ -177,19 +192,24 @@ export const AdminRecipes = () => {
                     )}
                   </div>
 
+                  {/* Nội dung */}
                   <CardContent className="p-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-semibold line-clamp-1">{r.name}</h3>
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-semibold text-gray-900 line-clamp-1">
+                        {r.name}
+                      </h3>
                       {renderStatusBadge(r.status)}
                     </div>
+
                     <p className="text-sm text-gray-600">👤 {r.author}</p>
                   </CardContent>
                 </Link>
 
-                <CardFooter className="flex justify-between items-center text-sm border-t p-4 text-gray-600">
+                {/* Footer */}
+                <CardFooter className="flex justify-between items-center text-sm border-t p-4 text-gray-600 bg-gray-50">
                   <div className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
-                    {r.cookTime || 0} phút
+                    {r.cookTime} phút
                   </div>
 
                   <div className="flex items-center gap-1">
@@ -198,7 +218,7 @@ export const AdminRecipes = () => {
                   </div>
                 </CardFooter>
 
-                {/* 🔄 Dropdown thay đổi trạng thái nhanh */}
+                {/* Dropdown trạng thái */}
                 <div className="absolute top-2 right-2">
                   <Select
                     value={r.status}
@@ -209,7 +229,7 @@ export const AdminRecipes = () => {
                       )
                     }
                   >
-                    <SelectTrigger className="w-[110px] text-xs">
+                    <SelectTrigger className="w-[110px] text-xs bg-white shadow-sm">
                       <SelectValue placeholder="Trạng thái" />
                     </SelectTrigger>
                     <SelectContent>
